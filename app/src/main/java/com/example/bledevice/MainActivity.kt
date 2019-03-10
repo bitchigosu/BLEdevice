@@ -15,6 +15,8 @@ import android.view.View
 import kotlinx.android.synthetic.main.activity_main.*
 import java.nio.charset.Charset
 import java.util.*
+import java.util.concurrent.Future
+import kotlin.math.log
 
 class MainActivity : AppCompatActivity(), View.OnClickListener {
     private val TAG = "MainActivity"
@@ -24,6 +26,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     private val desiredTransmitCharacteristicUUID: UUID = UUID.fromString("436AA6E9-082E-4CE8-A08B-01D81F195B24")
     private val desiredReceiveCharacteristicUUID: UUID = UUID.fromString("436A0C82-082E-4CE8-A08B-01D81F195B24")
     private val desiredServiceUUID: UUID = UUID.fromString("436A62C0-082E-4CE8-A08B-01D81F195B24")
+    private val descriptorUUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     private lateinit var writeCharacteristic: BluetoothGattCharacteristic
     private lateinit var readCharacteristic: BluetoothGattCharacteristic
     private var responseString: String = ""
@@ -114,6 +117,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     override fun onClick(v: View?) {
         if (!mBluetoothAdapter!!.isEnabled) {
+            mLeDeviceAdapter.clear()
             mBluetoothAdapter.takeIf {
                 it!!.isEnabled
             }?.apply {
@@ -227,6 +231,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             }
         }
 
+
         override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
             mGatt = gatt!!
             val services: MutableList<BluetoothGattService>? = gatt.services
@@ -234,28 +239,22 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 runOnUiThread {
                     uuid_textView.text = "" + uuid_textView.text + "\n" + services[i].uuid
                 }
-                Log.d(TAG, "onServicesDiscovered: ${services.get(i).uuid}")
+                Log.d(TAG, "onServicesDiscovered: ${services[i].uuid}")
                 for (j in 0 until services[i].characteristics.size) {
-                    //    gatt.readCharacteristic(services[i].characteristics[j])
+                       // gatt.readCharacteristic(services[i].characteristics[j])
                 }
             }
             val customService: BluetoothGattService = gatt.getService(desiredServiceUUID)
             val customWriteCharacteristic = customService.getCharacteristic(desiredTransmitCharacteristicUUID)
             val customReadCharacteristic = customService.getCharacteristic(desiredReceiveCharacteristicUUID)
-
-            when (status) {
-                BluetoothGatt.GATT_SUCCESS -> {
-                    gatt.readCharacteristic(customReadCharacteristic)
-                } //broadcastUpdate(ACTION_GATT_SERVICES_DISCOVERED)
-                else ->
-                    Log.d(TAG, "onServicesDiscoveredStatus: $status")
+            val descriptor = customReadCharacteristic.getDescriptor(descriptorUUID).apply {
+                value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
             }
+            gatt.readCharacteristic(customReadCharacteristic)
+
             customWriteCharacteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-            customWriteCharacteristic.value = "010d0e0127".toByteArray(Charsets.UTF_8)
-            val s = gatt.writeCharacteristic(customWriteCharacteristic)
-            if (s) Log.d(TAG, "onServicesDiscovered: write is successful")
-            else Log.d(TAG, "onServicesDiscovered: write failed")
-            Log.d(TAG, "onServicesDiscovered: ${customWriteCharacteristic.value.toString(Charsets.UTF_8)}")
+            customWriteCharacteristic.value = "010d0e01".toByteArray(Charsets.UTF_8)
+            gatt.writeCharacteristic(customWriteCharacteristic)
         }
 
         override fun onCharacteristicRead(
@@ -265,6 +264,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         ) {
             when (status) {
                 BluetoothGatt.GATT_SUCCESS -> {
+                    broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic)
                     Log.d(TAG, "onCharacteristicRead: ${characteristic!!.value.toString(Charsets.UTF_8)}")
                 }
             }
@@ -278,8 +278,9 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         ) {
             when (status) {
                 BluetoothGatt.GATT_SUCCESS -> {
-                    // broadcastUpdate(ACTION_DATA_WRITTEN, characteristic)
-                    Log.d(TAG, "onCharacteristicWrite: SUCCESS!!")
+                    broadcastUpdate(ACTION_DATA_WRITTEN, characteristic)
+                    Log.d(TAG, "on" +
+                            "CharacteristicWrite: SUCCESS!!")
                 }
                 else -> {
                     Log.d(TAG, "onCharacteristicWrite: Failed :C")
@@ -289,6 +290,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?) {
             Log.d(TAG, "onCharacteristicChanged: ${characteristic.toString()}")
+            broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic)
         }
 
         private fun broadcastUpdate(action: String) {
@@ -312,31 +314,28 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                         }
                     }
                     for (i in 0 until 8) {
-                        val heartRate = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, i)
+                        val heartRate = characteristic.value.toString(Charsets.UTF_8)
                         runOnUiThread {
                             uuid_characteristics_textView.text =
                                 " " + uuid_characteristics_textView.text + " " + heartRate
                         }
                     }
-                    val heartRate = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, 7)
-                    Log.d(TAG, String.format("Received heart rate: %d", heartRate))
-                    intent.putExtra(EXTRA_DATA, (heartRate).toString())
+                    val heartRate = characteristic.value.toString(Charset.defaultCharset())
+                    Log.d(TAG, "broadcastUpdate: Recieved heartRate ${heartRate}")
+                    intent.putExtra(EXTRA_DATA, heartRate)
                 }
-                else -> {
+                desiredTransmitCharacteristicUUID -> {
                     // For all other profiles, writes the data formatted in HEX.
-                    val data: ByteArray? = characteristic!!.value
-                    writeCharacteristic(
-                        mGatt,
-                        desiredServiceUUID,
-                        desiredTransmitCharacteristicUUID,
-                        9999999999.toInt()
-                    )
+                    val data: ByteArray? = characteristic.value
                     if (data?.isNotEmpty() == true) {
                         val hexString: String = data.joinToString(separator = " ") {
                             String.format("%02X", it)
                         }
                         intent.putExtra(EXTRA_DATA, "$data\n$hexString")
                     }
+                }
+                else -> {
+                    Log.d(TAG, "broadcastUpdate: no matches with characteristic uuid")
                 }
             }
         }
