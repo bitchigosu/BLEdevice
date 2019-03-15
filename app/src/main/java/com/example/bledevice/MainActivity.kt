@@ -29,17 +29,12 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     private val desiredReceiveCharacteristicUUID: UUID = UUID.fromString("436A0C82-082E-4CE8-A08B-01D81F195B24")
     private val desiredServiceUUID: UUID = UUID.fromString("436A62C0-082E-4CE8-A08B-01D81F195B24")
     private val descriptorUUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-    private lateinit var writeCharacteristic: BluetoothGattCharacteristic
-    private lateinit var readCharacteristic: BluetoothGattCharacteristic
-    private var responseString: String = ""
-    private lateinit var response: String
-    private var startIndex: Int = 0
-    private var endIndex: Int = 0
-    private var nowGlucoseIndex2: Int = 0
-    private var nowGlucoseIndex3: Int = 0
-    private var nowGlucoseOffset: Int = 0
+
 
     private lateinit var mGatt: BluetoothGatt
+    private lateinit var mService: BluetoothGattService
+    private lateinit var mWriteCharacteristic: BluetoothGattCharacteristic
+    private lateinit var mReadCharacteristic: BluetoothGattCharacteristic
 
     companion object {
         private const val SCAN_PERIOD: Long = 10000
@@ -118,6 +113,9 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         }
         searchButton.isEnabled = true
         searchButton.setOnClickListener(this)
+        sendButton.setOnClickListener {
+            sendCommand()
+        }
     }
 
     override fun onClick(v: View?) {
@@ -182,27 +180,17 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
             mGatt = gatt!!
             val services: MutableList<BluetoothGattService>? = gatt.services
+            mService = gatt.getService(desiredServiceUUID)
+            mWriteCharacteristic = mService.getCharacteristic(desiredTransmitCharacteristicUUID)
+            mReadCharacteristic = mService.getCharacteristic(desiredReceiveCharacteristicUUID)
+
 
             for (i in 0 until services!!.size) {
                 runOnUiThread {
                     uuid_textView.text = "" + uuid_textView.text + "\n" + services[i].uuid
                 }
                 Log.d(TAG, "onServicesDiscovered: ${services[i].uuid}")
-                for (j in 0 until services[i].characteristics.size) {
-                    // gatt.readCharacteristic(services[i].characteristics[j])
-                }
             }
-            //broadcastUpdate(ACTION_GATT_SERVICES_DISCOVERED)
-
-            val customService: BluetoothGattService = gatt.getService(desiredServiceUUID)
-            val customWriteCharacteristic = customService.getCharacteristic(desiredTransmitCharacteristicUUID)
-            val customReadCharacteristic = customService.getCharacteristic(desiredReceiveCharacteristicUUID)
-
-            gatt.readCharacteristic(customReadCharacteristic)
-            EnableNotifications(gatt)
-
-            //  customWriteCharacteristic.value = "010d0e01".toByteArray(Charsets.UTF_8)
-            //  gatt.writeCharacteristic(customWriteCharacteristic)
         }
 
         override fun onCharacteristicRead(
@@ -213,7 +201,12 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             when (status) {
                 BluetoothGatt.GATT_SUCCESS -> {
                     broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic)
-                    Log.d(TAG, "onCharacteristicRead: ${characteristic!!.value.toString(Charsets.UTF_8)}")
+                    for (i in 0 until 12) {
+                        Log.d(
+                            TAG, "onCharacteristicRead: ${characteristic!!
+                                .getFloatValue(BluetoothGattCharacteristic.FORMAT_UINT8, 0)}"
+                        )
+                    }
                 }
             }
 
@@ -251,7 +244,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         private fun broadcastUpdate(action: String, characteristic: BluetoothGattCharacteristic?) {
             val intent = Intent(action)
             when (characteristic!!.uuid) {
-                desiredReceiveCharacteristicUUID -> {
+                desiredTransmitCharacteristicUUID -> {
                     var offset = 0
                     val flags = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, offset)
                     offset += 1
@@ -262,6 +255,23 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                     val sensorStatusAnnunciationPresent = (flags and 0x08) > 0
                     offset += 2
                     offset += 7
+                    for (i in 0 until 13)
+                        Log.d(
+                            TAG,
+                            "broadcastUpdate: INT VALUES: ${characteristic.getIntValue(
+                                BluetoothGattCharacteristic.FORMAT_UINT8,
+                                i
+                            )}"
+                        )
+                    for (i in 0 until 13)
+                        Log.d(
+                            TAG,
+                            "broadcastUpdate: FLOAT VALUES: ${characteristic.getFloatValue(
+                                BluetoothGattCharacteristic.FORMAT_SFLOAT,
+                                i
+                            )}"
+                        )
+                    Log.d(TAG, "broadcastUpdate: STRING VALUE: ${characteristic.getStringValue(0)}")
 
                     if (timeOffsetPresent) {
                         val timeOffset = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_SINT16, offset)
@@ -269,17 +279,8 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                     }
 
                     if (typeAndLocationPresent) {
-                        var glucose = characteristic.getFloatValue(BluetoothGattCharacteristic.FORMAT_SFLOAT, 2)
-                        for (i in 0 until 10) {
-                            Log.d(
-                                TAG,
-                                "broadcastUpdate: ${characteristic.getFloatValue(
-                                    BluetoothGattCharacteristic.FORMAT_SFLOAT,
-                                    i
-                                )}"
-                            )
-
-                        }
+                        var glucose = characteristic.getFloatValue(BluetoothGattCharacteristic.FORMAT_SFLOAT, 11)
+                        Log.d(TAG, "broadcastUpdate: $glucose")
                         glucose = if (concentrationUnit == "mol/L") {
                             Math.round(glucose * 10000 / MmollToMgdl).toFloat()
                         } else {
@@ -299,7 +300,16 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         }
     }
 
-    private fun EnableNotifications(gatt: BluetoothGatt) {
+    private fun sendCommand() {
+        val value = "010d0e0127".toByteArray(Charsets.UTF_8)
+        Log.d(TAG, "sendCommand: $value")
+        mWriteCharacteristic.value = value
+        Log.d(TAG, "sendCommand: ${mWriteCharacteristic.value}")
+        val b = mGatt.writeCharacteristic(mWriteCharacteristic)
+        Log.d(TAG, "sendCommand: $b")
+    }
+
+    private fun enableNotifications(gatt: BluetoothGatt) {
         val service = gatt.getService(desiredServiceUUID)
         val characteristic = service.getCharacteristic(desiredReceiveCharacteristicUUID)
         val descriptor = characteristic.getDescriptor(descriptorUUID)
