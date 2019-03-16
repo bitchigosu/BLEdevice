@@ -1,4 +1,4 @@
-package com.example.bledevice;
+package com.example.bledevice.utils;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -7,25 +7,24 @@ import java.util.UUID;
 
 public class GlucoseReadingRx extends BluetoothCHelper {
 
-    public ByteBuffer data = null;
+    private ByteBuffer data = null;
 
-    private int flags;
-    public int sequence;
-    public int year;
-    public int month;
-    public int day;
-    public int hour;
-    public int minute;
-    public int second;
-    public int offset;
-    public float kgl;
-    public float mol;
-    public double mgdl;
-    public long time;
-    public int sampleType;
-    public int sampleLocation;
-    public String device;
-    public boolean contextInfoFollows;
+    private int sequence;
+    private int year;
+    private int month;
+    private int day;
+    private int hour;
+    private int minute;
+    private int second;
+    private int offset;
+    private float kgl;
+    private float mol;
+    private double mgdl;
+    private long time;
+    private int sampleType;
+    private int sampleLocation;
+    private String device;
+    private boolean contextInfoFollows;
 
     public GlucoseReadingRx() {}
 
@@ -37,7 +36,7 @@ public class GlucoseReadingRx extends BluetoothCHelper {
         if (packet.length >= 14) {
             data = ByteBuffer.wrap(packet).order(ByteOrder.LITTLE_ENDIAN);
 
-            flags = data.get(0);
+            int flags = data.get(0);
             final boolean timeOffsetPresent = (flags & 0x01) > 0;
             final boolean typeAndLocationPresent = (flags & 0x02) > 0;
             final boolean concentrationUnitKgL = (flags & 0x04) == 0;

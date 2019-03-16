@@ -1,11 +1,11 @@
-package com.example.bledevice;
+package com.example.bledevice.utils;
 
 import android.os.Handler;
 import android.util.Log;
+import com.example.bledevice.MainActivity;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.ByteBuffer;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 

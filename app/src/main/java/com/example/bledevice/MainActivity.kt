@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.View
+import com.example.bledevice.utils.*
 import kotlinx.android.synthetic.main.activity_main.*
 import java.nio.ByteBuffer
 import java.util.*
@@ -19,14 +20,13 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlin.experimental.and
-import com.rits.cloning.Cloner;
+import com.rits.cloning.Cloner
 
 
 class MainActivity : AppCompatActivity(), View.OnClickListener {
     private val TAG = "MainActivity"
     private val REQUEST_COARSE_LOCATION = 2
     private var mConnectionState = STATE_DISCONNECTED
-    private val UUID_GLUCOSE_MEASUREMENT: UUID = UUID.fromString("00002A00-0000-1000-8000-00805F9B34FB")
     private val desiredTransmitCharacteristicUUID: UUID = UUID.fromString("436AA6E9-082E-4CE8-A08B-01D81F195B24")
     private val desiredReceiveCharacteristicUUID: UUID = UUID.fromString("436A0C82-082E-4CE8-A08B-01D81F195B24")
     private val desiredServiceUUID: UUID = UUID.fromString("436A62C0-082E-4CE8-A08B-01D81F195B24")
@@ -38,6 +38,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     private lateinit var mReadCharacteristic: BluetoothGattCharacteristic
 
     private var mBondingState: Int = 0
+    private val mFullData: ByteArray = ByteArray(344)
 
     private var mGetNowGlucoseDataCommand: Boolean = false
     private var mGetNowGlucoseDataIndexCommand: Boolean = false
@@ -46,6 +47,19 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     private val GET_SENSOR_AGE_DELAY = 3 * 3600
     private val BLUKON_GETSENSORAGE_TIMER = "blukon-getSensorAge-timer"
     private val BLUKON_DECODE_SERIAL_TIMER = "blukon-decodeSerial-timer"
+
+
+    private var mBlockNumber: Int = 0
+    private var mCurrentBlockNumber: Int = 0
+    private var mCurrentOffset: Int = 0
+    private var mTimeLastCmdReceived: Long = 0
+    private var mPersistentTimeLastBg: Long = 0
+    private var mMinutesDiffToLastReading: Int = 0
+    private var mGetOlderReading: Boolean = false
+    private var mMinutesBack: Int = 0
+    private var mTimeLastBg: Long = 0
+    private var mCurrentTrendIndex: Int = 0
+    private var mNowGlucoseOffset: Int = 0
 
 
     private val mLock = ReentrantLock()
@@ -147,7 +161,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         mHandler = Handler()
         mLeDeviceAdapter = LeDeviceListAdapter(this)
         listview.adapter = mLeDeviceAdapter
-        listview.setOnItemClickListener { parent, view, position, id ->
+        listview.setOnItemClickListener { _, _, position, id ->
             val device: BluetoothDevice = mLeDeviceAdapter.getDevice(position)
             mBluetoothGatt = device
                 .connectGatt(this, false, mGattCallback)
@@ -156,6 +170,9 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         searchButton.setOnClickListener(this)
         sendButton.setOnClickListener {
             sendCommand()
+        }
+        closeButton.setOnClickListener {
+            close()
         }
     }
 
@@ -217,7 +234,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             }
         }
 
-
         override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
             mGatt = gatt!!
             mBondingState = mGatt.device.bondState
@@ -232,7 +248,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 Log.d(TAG, "onServicesDiscovered: Device is already bonded")
             }
 
-            val services: MutableList<BluetoothGattService>? = gatt.services
             mService = gatt.getService(desiredServiceUUID)
             mWriteCharacteristic = mService.getCharacteristic(desiredTransmitCharacteristicUUID)
             mReadCharacteristic = mService.getCharacteristic(desiredReceiveCharacteristicUUID)
@@ -273,9 +288,9 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?) {
             Log.d(TAG, "onCharacteristicChanged: ${characteristic!!.value.toString()}")
-            val data = characteristic!!.getValue()
+            val data = characteristic.value
             if (data != null && data.isNotEmpty()) {
-                setSerialDataToTransmitterRawData(data, data.size)
+                setSerialDataToTransmitterRawData(data)
             }
         }
 
@@ -288,52 +303,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             val intent = Intent(action)
             when (characteristic!!.uuid) {
                 desiredTransmitCharacteristicUUID -> {
-                    var offset = 0
-                    val flags = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_UINT8, offset)
-                    offset += 1
-
-                    val timeOffsetPresent = (flags and 0x01) > 0
-                    val typeAndLocationPresent = (flags and 0x02) > 0
-                    val concentrationUnit = if ((flags and 0x04) > 0) "mol/L" else "kg/L"
-                    val sensorStatusAnnunciationPresent = (flags and 0x08) > 0
-                    offset += 2
-                    offset += 7
-                    for (i in 0 until 13)
-                        Log.d(
-                            TAG,
-                            "broadcastUpdate: INT VALUES: ${characteristic.getIntValue(
-                                BluetoothGattCharacteristic.FORMAT_UINT8,
-                                i
-                            )}"
-                        )
-                    for (i in 0 until 13)
-                        Log.d(
-                            TAG,
-                            "broadcastUpdate: FLOAT VALUES: ${characteristic.getFloatValue(
-                                BluetoothGattCharacteristic.FORMAT_SFLOAT,
-                                i
-                            )}"
-                        )
-                    Log.d(TAG, "broadcastUpdate: STRING VALUE: ${characteristic.getStringValue(0)}")
-
-                    if (timeOffsetPresent) {
-                        val timeOffset = characteristic.getIntValue(BluetoothGattCharacteristic.FORMAT_SINT16, offset)
-                        offset += 2
-                    }
-
-                    if (typeAndLocationPresent) {
-                        var glucose = characteristic.getFloatValue(BluetoothGattCharacteristic.FORMAT_SFLOAT, 11)
-                        Log.d(TAG, "broadcastUpdate: $glucose")
-                        glucose = if (concentrationUnit == "mol/L") {
-                            Math.round(glucose * 10000 / MmollToMgdl).toFloat()
-                        } else {
-                            Math.round(glucose * 10000 * MmollToMgdl).toFloat()
-                        }
-
-                        Log.d(TAG, "broadcastUpdate: Received glucose ${glucose}")
-                        intent.putExtra(EXTRA_DATA, glucose)
-                    }
-
+                    //GlucoseReadingRx
                 }
                 else -> {
                     Log.d(TAG, "broadcastUpdate: No matches")
@@ -343,7 +313,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         }
     }
 
-    private fun setSerialDataToTransmitterRawData(buffer: ByteArray, len: Int) {
+    private fun setSerialDataToTransmitterRawData(buffer: ByteArray) {
         val reply = decodeBlukonPacket(buffer)
         if (reply != null) {
             sendBtMessage(reply)
@@ -358,7 +328,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     private fun sendBtMessage(message: ByteBuffer?): Boolean {
         Log.d(TAG, "sendBtMessage: entered")
         val value = message!!.array()
-        if (mWriteCharacteristic != null && mWriteCharacteristic != mReadCharacteristic) {
+        if (mWriteCharacteristic != mReadCharacteristic) {
             return writeChar(mWriteCharacteristic, value)
         }
         return writeChar(mReadCharacteristic, value)
@@ -367,16 +337,16 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     @Synchronized
     private fun writeChar(localmCharacteristic: BluetoothGattCharacteristic, value: ByteArray?): Boolean {
         localmCharacteristic.value = value
-        val result = mGatt != null && mGatt.writeCharacteristic(localmCharacteristic)
+        val result = mGatt.writeCharacteristic(localmCharacteristic)
         if (!result) {
             Log.d(TAG, "writeChar: Error writing characteristic")
             val resendCharacteristic: BluetoothGattCharacteristic = cloner.shallowClone(localmCharacteristic)
             waitFor(1000)
             JoHH.runOnUiThreadDelayed(Runnable {
                 kotlin.run {
-                        val newResult = mGatt.writeCharacteristic(resendCharacteristic)
-                        if (!newResult) Log.d(TAG, "writeChar: Error writing char on 2nd try")
-                        else Log.d(TAG, "writeChar: Succeeded writing char on 2nd try")
+                    val newResult = mGatt.writeCharacteristic(resendCharacteristic)
+                    if (!newResult) Log.d(TAG, "writeChar: Error writing char on 2nd try")
+                    else Log.d(TAG, "writeChar: Succeeded writing char on 2nd try")
                 }
             }, 500)
         } else {
@@ -385,28 +355,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         return result
     }
 
-    @Synchronized
-    fun close() {
-        mGatt.close()
-        mConnectionState = STATE_DISCONNECTED
-    }
-
-
-    private var mBlockNumber: Int = 0
-    private var mCurrentBlockNumber: Int = 0
-    private var mCurrentOffset: Int = 0
-
-
-    private var mTimeLastCmdReceived: Long = 0
-    private var mPersistentTimeLastBg: Long = 0
-
-    private var mMinutesDiffToLastReading: Int = 0
-
-    private var mGetOlderReading: Boolean = false
-
-    private var mMinutesBack: Int = 0
-
-    private var mTimeLastBg: Long = 0
 
     @Synchronized
     fun decodeBlukonPacket(buffer: ByteArray?): ByteArray? {
@@ -776,8 +724,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     }
 
-    private val mFullData: ByteArray = ByteArray(344)
-
     private fun handlegetHistoricDataResponse(buffer: ByteArray) {
         Log.e(TAG, "recieved historic data, m_block_number = $mBlockNumber")
         // We are looking for 43 blocks of 8 bytes.
@@ -831,10 +777,10 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
         // option to use 13 bit mask
         //final boolean thirteen_bit_mask = Pref.getBooleanDefaultFalse("testing_use_thirteen_bit_mask");
-        val thirteen_bit_mask = true
+        val thirteenBitMask = true
         // grep 2 bytes with BG data from input bytearray, mask out 12 LSB bits and rescale for xDrip+
         rawGlucose =
-            (input[3 + mNowGlucoseOffset + 1].toLong() and if (thirteen_bit_mask) 0x1F else 0x0F).shl(8) or (input[3 + mNowGlucoseOffset].toLong() and 0xFF)
+            (input[3 + mNowGlucoseOffset + 1].toLong() and if (thirteenBitMask) 0x1F else 0x0F).shl(8) or (input[3 + mNowGlucoseOffset].toLong() and 0xFF)
         Log.i(TAG, "rawGlucose=$rawGlucose, m_nowGlucoseOffset=$mNowGlucoseOffset")
 
         // rescale
@@ -843,13 +789,9 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         return curGluc
     }
 
-    private var mCurrentTrendIndex: Int = 0
-    private var mNowGlucoseOffset: Int = 0
-
-
     private fun blockNumberForNowGlucoseData(input: ByteArray): Int {
-        var nowGlucoseIndex2 = 0
-        var nowGlucoseIndex3 = 0
+        var nowGlucoseIndex2: Int
+        var nowGlucoseIndex3: Int
 
         nowGlucoseIndex2 = (input[5] and 0x0F).toInt()
 
@@ -879,7 +821,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
 
     private fun blockNumberForNowGlucoseDataDelayed(delayedIndex: Int): Int {
-        val i: Int
         var ngi2: Int
         val ngi3: Int
 
@@ -919,18 +860,9 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         mGatt.writeCharacteristic(mWriteCharacteristic)
     }
 
-    private fun enableNotifications() {
-        val service = mGatt.getService(desiredServiceUUID)
-        val characteristic = service.getCharacteristic(desiredReceiveCharacteristicUUID)
-        val descriptor = characteristic.getDescriptor(descriptorUUID)
-        descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-        val b = mGatt.writeDescriptor(descriptor)
-        Log.d(TAG, "enableNotifications: $b")
-    }
-
     private fun isSensorReady(sensorStatusByte: Byte): Boolean {
 
-        var sensorStatusString = ""
+        var sensorStatusString: String
         var ret = false
         val qSSB = sensorStatusByte.toInt()
 
@@ -962,132 +894,16 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         return ret
     }
 
-    // This function assumes that the UID is starting at place 3, and is 8 bytes long
-    fun decodeSerialNumber(input: ByteArray) {
-
-        val uuid = byteArrayOf(0, 0, 0, 0, 0, 0, 0, 0)
-        val lookupTable = arrayOf(
-            "0",
-            "1",
-            "2",
-            "3",
-            "4",
-            "5",
-            "6",
-            "7",
-            "8",
-            "9",
-            "A",
-            "C",
-            "D",
-            "E",
-            "F",
-            "G",
-            "H",
-            "J",
-            "K",
-            "L",
-            "M",
-            "N",
-            "P",
-            "Q",
-            "R",
-            "T",
-            "U",
-            "V",
-            "W",
-            "X",
-            "Y",
-            "Z"
-        )
-        val uuidShort = byteArrayOf(0, 0, 0, 0, 0, 0, 0, 0)
-        var i: Int
-
-        i = 2
-        while (i < 8) {
-            uuidShort[i - 2] = input[2 + 8 - i]
-            i++
-        }
-        uuidShort[6] = 0x00
-        uuidShort[7] = 0x00
-
-        var binary = ""
-        var binS = ""
-        i = 0
-        while (i < 8) {
-            binS = String.format(
-                "%8s",
-                Integer.toBinaryString(((uuidShort[i] and 0xFF.toByte()).toInt())).replace(' ', '0')
-            )
-            binary += binS
-            i++
-        }
-
-        var v = "0"
-        val pozS = charArrayOf(0.toChar(), 0.toChar(), 0.toChar(), 0.toChar(), 0.toChar())
-        i = 0
-        while (i < 10) {
-            for (k in 0..4) pozS[k] = binary[5 * i + k]
-            val value =
-                (pozS[0] - '0') * 16 + (pozS[1] - '0') * 8 + (pozS[2] - '0') * 4 + (pozS[3] - '0') * 2 + (pozS[4] - '0') * 1
-            v += lookupTable[value]
-            i++
-        }
-        Log.d(TAG, "decodeSerialNumber=$v")
-    }
-
     private fun waitFor(millis: Long) {
         mLock.withLock {
             condition.await(millis, TimeUnit.MILLISECONDS)
         }
     }
 
-    private val HEX_CHARS = "0123456789ABCDEF".toCharArray()
-
-    fun ByteArray.toHex(): String {
-        val result = StringBuffer()
-
-        forEach {
-            val octet = it.toInt()
-            val firstIndex = (octet and 0xF0).ushr(4)
-            val secondIndex = octet and 0x0F
-            result.append(HEX_CHARS[firstIndex])
-            result.append(HEX_CHARS[secondIndex])
-        }
-
-        return result.toString()
-    }
-
-    fun String.hexStringToByteArray(): ByteArray {
-
-        val result = ByteArray(length / 2)
-
-        for (i in 0 until length step 2) {
-            val firstIndex = HEX_CHARS.indexOf(this[i]);
-            val secondIndex = HEX_CHARS.indexOf(this[i + 1]);
-
-            val octet = firstIndex.shl(4).or(secondIndex)
-            result.set(i.shr(1), octet.toByte())
-        }
-
-        return result
-    }
-
-    fun hexToBytes(hex: String): ByteArray {
-        try {
-            val length = hex.length
-            val bytes = ByteArray(length / 2)
-            var i = 0
-            while (i < length) {
-                bytes[i / 2] = ((Character.digit(hex[i], 16) shl 4) + Character.digit(hex[i + 1], 16)).toByte()
-                i += 2
-            }
-            return bytes
-        } catch (e: Exception) {
-            Log.e(TAG, "Got Exception: $e")
-            return ByteArray(0)
-        }
-
+    @Synchronized
+    fun close() {
+        mGatt.close()
+        mConnectionState = STATE_DISCONNECTED
     }
 
     override fun onDestroy() {

@@ -1,8 +1,9 @@
-package com.example.bledevice;
+package com.example.bledevice.utils;
 
 import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 import android.util.Log;
+import com.example.bledevice.MainActivity;
 
 /**
  * Created by jamorham on 01/01/2018.

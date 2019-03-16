@@ -1,8 +1,9 @@
-package com.example.bledevice;
+package com.example.bledevice.utils;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
+import com.example.bledevice.MainActivity;
 
 
 /**

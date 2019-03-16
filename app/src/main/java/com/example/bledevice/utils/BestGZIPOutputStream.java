@@ -1,4 +1,4 @@
-package com.example.bledevice;
+package com.example.bledevice.utils;
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more

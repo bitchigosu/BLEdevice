@@ -1,4 +1,4 @@
-package com.example.bledevice;
+package com.example.bledevice.utils;
 
 abstract class BluetoothCHelper {
 

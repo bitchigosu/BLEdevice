@@ -1,17 +1,16 @@
-package com.example.bledevice;
+package com.example.bledevice.utils;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Calendar;
 
 public class CurrentTimeRx extends BluetoothCHelper {
-    private ByteBuffer data = null;
     public boolean noClockAccess = false;
     public boolean sequenceNotReliable = false;
-    public int year, month, day, hour, minute, second;
-    public long time;
-    public long timediff;
-    public long timediff_calculated;
+    private int year, month, day, hour, minute, second;
+    private long time;
+    private long timediff;
+    private long timediff_calculated;
 
     public CurrentTimeRx() {
     }
@@ -19,7 +18,7 @@ public class CurrentTimeRx extends BluetoothCHelper {
     public CurrentTimeRx(byte[] packet) {
 
         if (packet.length >= 7) {
-            data = ByteBuffer.wrap(packet).order(ByteOrder.LITTLE_ENDIAN);
+            ByteBuffer data = ByteBuffer.wrap(packet).order(ByteOrder.LITTLE_ENDIAN);
 
             year = unsignedBytesToInt(data.get(0), data.get(1));
             month = unsignedByteToInt(data.get(2));

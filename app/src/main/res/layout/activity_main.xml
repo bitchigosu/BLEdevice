@@ -73,6 +73,18 @@
             android:layout_marginTop="20dp"
             android:text="Read"
             style="@style/searchBtn"/>
+    <Button
+            android:id="@+id/closeButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toBottomOf="@id/sendButton"
+            app:layout_constraintStart_toStartOf="@id/searchButton"
+            app:layout_constraintEnd_toEndOf="@id/searchButton"
+            android:layout_marginStart="20dp"
+            android:layout_marginEnd="20dp"
+            android:layout_marginTop="20dp"
+            android:text="Close"
+            style="@style/searchBtn"/>
 
 
 </android.support.constraint.ConstraintLayout>
