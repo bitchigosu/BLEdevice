@@ -1,7 +1,10 @@
 package com.example.bledevice;
 
+import android.os.Handler;
 import android.util.Log;
+import org.jetbrains.annotations.Nullable;
 
+import java.nio.ByteBuffer;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -51,5 +54,26 @@ public class JoHH {
     }
     public static String dateTimeText(long timestamp) {
         return android.text.format.DateFormat.format("yyyy-MM-dd kk:mm:ss", timestamp).toString();
+    }
+
+    @Nullable
+    public static ByteBuffer bArrayAsBuffer(byte[] bytes) {
+        final ByteBuffer bb = ByteBuffer.allocate(bytes.length);
+        bb.put(bytes);
+        return bb;
+    }
+
+    public static boolean runOnUiThreadDelayed(Runnable theRunnable, long delay) {
+        final Handler mainHandler = new Handler(MainActivity.mContext.getApplicationContext().getMainLooper());
+        return mainHandler.postDelayed(theRunnable, delay);
+    }
+
+    public static synchronized void clearRatelimit(final String name) {
+        if (PersistentStore.getLong(name) > 0) {
+            PersistentStore.setLong(name, 0);
+        }
+        if (rateLimits.containsKey(name)) {
+            rateLimits.remove(name);
+        }
     }
 }
