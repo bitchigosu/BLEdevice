@@ -43,41 +43,17 @@
             android:layout_height="wrap_content"
             app:layout_constraintStart_toStartOf="@id/listview"
             app:layout_constraintEnd_toEndOf="@id/listview"
-            app:layout_constraintTop_toBottomOf="@id/listview"
+            app:layout_constraintTop_toBottomOf="@id/closeButton"
             android:layout_marginTop="20dp"
             android:layout_marginStart="20dp"
             android:layout_marginEnd="20dp"
     />
 
-    <TextView
-            android:id="@+id/uuid_characteristics_textView"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:layout_constraintStart_toStartOf="@id/listview"
-            app:layout_constraintEnd_toEndOf="@id/listview"
-            app:layout_constraintTop_toBottomOf="@id/uuid_textView"
-            android:layout_marginTop="20dp"
-            android:layout_marginStart="20dp"
-            android:layout_marginEnd="20dp"
-    />
-
-    <Button
-            android:id="@+id/sendButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:layout_constraintTop_toBottomOf="@id/listview"
-            app:layout_constraintStart_toStartOf="@id/searchButton"
-            app:layout_constraintEnd_toEndOf="@id/searchButton"
-            android:layout_marginStart="20dp"
-            android:layout_marginEnd="20dp"
-            android:layout_marginTop="20dp"
-            android:text="Read"
-            style="@style/searchBtn"/>
     <Button
             android:id="@+id/closeButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:layout_constraintTop_toBottomOf="@id/sendButton"
+            app:layout_constraintTop_toBottomOf="@id/listview"
             app:layout_constraintStart_toStartOf="@id/searchButton"
             app:layout_constraintEnd_toEndOf="@id/searchButton"
             android:layout_marginStart="20dp"

@@ -64,7 +64,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private val mLock = ReentrantLock()
     private val condition = mLock.newCondition()
-    val cloner: Cloner = Cloner()
+    private val cloner: Cloner = Cloner()
 
     companion object {
         private const val SCAN_PERIOD: Long = 10000
@@ -168,9 +168,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         }
         searchButton.isEnabled = true
         searchButton.setOnClickListener(this)
-        sendButton.setOnClickListener {
-            sendCommand()
-        }
         closeButton.setOnClickListener {
             close()
         }
@@ -369,7 +366,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
         mTimeLastCmdReceived = JoHH.tsl()
 
-        // calculate time delta to last valid BG reading
+        // calculate time delta to last valid reading
         mPersistentTimeLastBg = PersistentStore.getLong("blukon-time-of-last-reading")
         mMinutesDiffToLastReading = (((JoHH.tsl() - mPersistentTimeLastBg) / 1000 + 30) / 60).toInt()
         Log.i(
@@ -384,7 +381,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             getHistoricReadings = true
         }
 
-        //BluCon code by gregorybel
         val strRecCmd = buffer.toHex().toLowerCase()
         Log.i(TAG, "Blukon data: $strRecCmd")
 
@@ -426,10 +422,12 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
             if (strRecCmd.startsWith(BLUCON_NAK_RESPONSE_ERROR14)) {
                 Log.e(TAG, "Timeout: please wait 5min or push button to restart!")
+                showText("Timeout: please wait 5min or push button to restart!")
             }
 
             if (strRecCmd.startsWith(PATCH_NOT_FOUND_RESPONSE)) {
                 Log.e(TAG, "Libre sensor has been removed!")
+                showText("Libre sensor has been removed!")
             }
 
             if (strRecCmd.startsWith(PATCH_READ_ERROR)) {
@@ -437,6 +435,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                     TAG,
                     "Patch read error.. please check the connectivity and re-initiate... or maybe battery is low?"
                 )
+                showText("Patch read error.. please check the connectivity and re-initiate... or maybe battery is low?")
                 Pref.setInt("bridge_battery", 1)
                 gotLowBat = true
             }
@@ -498,6 +497,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 Log.i(TAG, "Send ACK")
             } else {
                 Log.e(TAG, "Sensor is not ready, stop!")
+                showText("Sensor is not ready, stop!")
                 currentCommand = SLEEP_COMMAND
                 Log.i(TAG, "Send sleep cmd")
                 mCommunicationStarted = false
@@ -562,6 +562,8 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             Log.i(TAG, "SensorAge received")
 
             val sensorAge = sensorAge(buffer)
+            val sensorAgeDays = TimeUnit.SECONDS.toDays(sensorAge.toLong())
+            showText("Sensor Age: $sensorAgeDays")
 
             if (Pref.getBooleanDefaultFalse("external_blukon_algorithm") || getHistoricReadings!!) {
                 // Send the command to getHistoricData (read all blcoks from 0 to 0x2b)
@@ -572,7 +574,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 /* LibreAlarmReceiver.CalculateFromDataTransferObject, called when processing historical data,
                  * expects the sensor age not to be updated yet, so only update the sensor age when not retrieving history.
                  */
-                if (sensorAge > 0 && sensorAge < 200000) {
+                if (sensorAge in 1..199999) {
                     Pref.setInt("nfc_sensor_age", sensorAge)//in min
                 }
                 currentCommand = GET_NOW_DATA_INDEX_COMMAND
@@ -584,18 +586,17 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             /*
          * step 8: determine trend or historic data index
          */
-        } else if (currentCommand.startsWith(GET_NOW_DATA_INDEX_COMMAND) /*getNowDataIndex*/ && mGetNowGlucoseDataIndexCommand == true && strRecCmd.startsWith(
-                SINGLE_BLOCK_INFO_RESPONSE_PREFIX
-            )
+        } else if (currentCommand.startsWith(GET_NOW_DATA_INDEX_COMMAND) && mGetNowGlucoseDataIndexCommand
+            && strRecCmd.startsWith(SINGLE_BLOCK_INFO_RESPONSE_PREFIX)
         ) {
             cmdFound = 1
 
             // check time range for valid backfilling
-            if (mMinutesDiffToLastReading > 7 && mMinutesDiffToLastReading < 8 * 60) {
+            mGetOlderReading = if (mMinutesDiffToLastReading > 7 && mMinutesDiffToLastReading < 8 * 60) {
                 Log.i(TAG, "start backfilling")
-                mGetOlderReading = true
+                true
             } else {
-                mGetOlderReading = false
+                false
             }
             // get index to current BG reading
             mCurrentBlockNumber = blockNumberForNowGlucoseData(buffer)
@@ -610,12 +611,10 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 mMinutesBack = mMinutesDiffToLastReading
                 var delayedTrendIndex = mCurrentTrendIndex
                 // ensure to have min 3 mins distance to last reading to avoid doible draws (even if they are distict)
-                if (mMinutesBack > 17) {
-                    mMinutesBack = 15
-                } else if (mMinutesBack > 12) {
-                    mMinutesBack = 10
-                } else if (mMinutesBack > 7) {
-                    mMinutesBack = 5
+                when {
+                    mMinutesBack > 17 -> mMinutesBack = 15
+                    mMinutesBack > 12 -> mMinutesBack = 10
+                    mMinutesBack > 7 -> mMinutesBack = 5
                 }
                 Log.i(TAG, "read $mMinutesBack mins old trend data")
                 for (i in 0 until mMinutesBack) {
@@ -625,6 +624,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 val delayedBlockNumber = blockNumberForNowGlucoseDataDelayed(delayedTrendIndex)
                 currentCommand =
                     READ_SINGLE_BLOCK_COMMAND_PREFIX + Integer.toHexString(delayedBlockNumber)//getNowGlucoseData
+
                 Log.i(TAG, "getNowGlucoseData backfilling")
             }
             mGetNowGlucoseDataIndexCommand = false
@@ -633,10 +633,10 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             /*
          * step 9: calculate fro current index the block number next to read
          */
-        } else if (currentCommand.startsWith(READ_SINGLE_BLOCK_COMMAND_PREFIX_SHORT) /*getNowGlucoseData*/ && mGetNowGlucoseDataCommand == true && strRecCmd.startsWith(
-                SINGLE_BLOCK_INFO_RESPONSE_PREFIX
-            )
+        } else if (currentCommand.startsWith(READ_SINGLE_BLOCK_COMMAND_PREFIX_SHORT) && mGetNowGlucoseDataCommand
+            && strRecCmd.startsWith(SINGLE_BLOCK_INFO_RESPONSE_PREFIX)
         ) {
+
             Log.d(TAG, "Before Saving data: + currentCommand = $currentCommand")
             val blockId = currentCommand.substring(READ_SINGLE_BLOCK_COMMAND_PREFIX_SHORT.length)
             val now = JoHH.tsl()
@@ -649,8 +649,10 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
             cmdFound = 1
             val currentGlucose = nowGetGlucoseValue(buffer)
+            val currentGlucoseMMol = currentGlucose
 
             Log.i(TAG, "********got getNowGlucoseData=$currentGlucose")
+            showText("Current glucose: $currentGlucose")
 
             if (!mGetOlderReading) {
 
@@ -658,6 +660,8 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
                 PersistentStore.setLong("blukon-time-of-last-reading", mTimeLastBg)
                 Log.i(TAG, "time of current reading: " + JoHH.dateTimeText(mTimeLastBg))
+                showText("time of last reading: ${JoHH.dateTimeText(mPersistentTimeLastBg)}")
+                showText("time of current reading: " + JoHH.dateTimeText(mTimeLastBg))
 
                 /*
                  * step 10: send sleep command
@@ -670,7 +674,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             } else {
                 Log.i(TAG, "bf: processNewTransmitterData with delayed timestamp of $mMinutesBack min")
 
-                // @keencave - count down for next backfilling entry
                 mMinutesBack -= 5
                 if (mMinutesBack < 5) {
                     mGetOlderReading = false
@@ -688,9 +691,9 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
 
             }
-        } else if ((currentCommand.startsWith(GET_HISTORIC_DATA_COMMAND_ALL_BLOCKS) /*getHistoricData */ || currentCommand.isEmpty() && mBlockNumber > 0) && strRecCmd.startsWith(
-                MULTIPLE_BLOCK_RESPONSE_INDEX
-            )
+        } else if ((currentCommand.startsWith(GET_HISTORIC_DATA_COMMAND_ALL_BLOCKS) /*getHistoricData */
+                    || currentCommand.isEmpty() && mBlockNumber > 0)
+            && strRecCmd.startsWith(MULTIPLE_BLOCK_RESPONSE_INDEX)
         ) {
             cmdFound = 1
             handlegetHistoricDataResponse(buffer)
@@ -711,15 +714,16 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         }
 
 
-        if (currentCommand.length > 0 && cmdFound == 1) {
+        return if (currentCommand.isNotEmpty() && cmdFound == 1) {
             Log.i(TAG, "Sending reply: $currentCommand")
-            return hexToBytes(currentCommand)
+            hexToBytes(currentCommand)
         } else {
             if (cmdFound == 0) {
                 Log.e(TAG, "***COMMAND NOT FOUND! -> $strRecCmd on currentCmd=$currentCommand")
+                showText("***COMMAND NOT FOUND! -> $strRecCmd on currentCmd=$currentCommand")
             }
             currentCommand = ""
-            return null
+            null
         }
 
     }
@@ -784,16 +788,14 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         Log.i(TAG, "rawGlucose=$rawGlucose, m_nowGlucoseOffset=$mNowGlucoseOffset")
 
         // rescale
-        curGluc = getGlucose(rawGlucose)
+        //curGluc = getGlucose(rawGlucose)
 
-        return curGluc
+        return rawGlucose.toInt()
     }
 
     private fun blockNumberForNowGlucoseData(input: ByteArray): Int {
-        var nowGlucoseIndex2: Int
+        var nowGlucoseIndex2: Int = (input[5] and 0x0F).toInt()
         var nowGlucoseIndex3: Int
-
-        nowGlucoseIndex2 = (input[5] and 0x0F).toInt()
 
         mCurrentTrendIndex = nowGlucoseIndex2
 
@@ -804,7 +806,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         nowGlucoseIndex2 -= 6
         // adjust round robin
         if (nowGlucoseIndex2 < 4)
-            nowGlucoseIndex2 = nowGlucoseIndex2 + 96
+            nowGlucoseIndex2 += 96
 
         // calculate the absolute block number which correspond to trend index
         nowGlucoseIndex3 = 3 + nowGlucoseIndex2 / 8
@@ -821,15 +823,14 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
 
     private fun blockNumberForNowGlucoseDataDelayed(delayedIndex: Int): Int {
-        var ngi2: Int
+        var ngi2: Int = delayedIndex * 6 + 4
         val ngi3: Int
 
         // calculate byte offset in libre FRAM
-        ngi2 = delayedIndex * 6 + 4
 
         ngi2 -= 6
         if (ngi2 < 4)
-            ngi2 = ngi2 + 96
+            ngi2 += 96
 
         // calculate the block number where to get the BG reading
         ngi3 = 3 + ngi2 / 8
@@ -883,10 +884,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             -> sensorStatusString = "shutdown"
             0x06 -> sensorStatusString = "in failure"
             else -> sensorStatusString = "in an unknown state"
-        }// @keencave: to use dead sensor for test
-        //                ret = true;
-        // @keencave: to use dead sensors for test
-        //                ret = true;
+        }
 
         Log.i(TAG, "Sensor status is: $sensorStatusString")
 
@@ -904,6 +902,13 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     fun close() {
         mGatt.close()
         mConnectionState = STATE_DISCONNECTED
+    }
+
+    private fun showText(text: String) {
+        runOnUiThread {
+            uuid_textView.text = "" + uuid_textView.text + "\n" + text
+        }
+
     }
 
     override fun onDestroy() {
