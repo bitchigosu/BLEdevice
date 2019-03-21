@@ -21,6 +21,8 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlin.experimental.and
 import com.rits.cloning.Cloner
+import okhttp3.*
+import java.io.IOException
 
 
 class MainActivity : AppCompatActivity(), View.OnClickListener {
@@ -48,7 +50,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     private val BLUKON_GETSENSORAGE_TIMER = "blukon-getSensorAge-timer"
     private val BLUKON_DECODE_SERIAL_TIMER = "blukon-decodeSerial-timer"
 
-
     private var mBlockNumber: Int = 0
     private var mCurrentBlockNumber: Int = 0
     private var mCurrentOffset: Int = 0
@@ -61,73 +62,9 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     private var mCurrentTrendIndex: Int = 0
     private var mNowGlucoseOffset: Int = 0
 
-
     private val mLock = ReentrantLock()
     private val condition = mLock.newCondition()
     private val cloner: Cloner = Cloner()
-
-    companion object {
-        private const val SCAN_PERIOD: Long = 10000
-        private const val STATE_DISCONNECTED = 0
-        private const val STATE_CONNECTING = 1
-        private const val STATE_CONNECTED = 2
-        const val ACTION_GATT_CONNECTED = "com.example.bluetooth.le.ACTION_GATT_CONNECTED"
-        const val ACTION_GATT_DISCONNECTED = "com.example.bluetooth.le.ACTION_GATT_DISCONNECTED"
-        const val ACTION_GATT_SERVICES_DISCOVERED =
-            "com.example.bluetooth.le.ACTION_GATT_SERVICES_DISCOVERED"
-        const val ACTION_DATA_AVAILABLE = "com.example.bluetooth.le.ACTION_DATA_AVAILABLE"
-        const val EXTRA_DATA = "com.example.bluetooth.le.EXTRA_DATA"
-        const val ACTION_DATA_WRITTEN = "com.example.bluetooth.ACTION_DATA_WRITTEN"
-
-        const val MmollToMgdl = 18.0182
-        const val MgdlToMmoll = 1 / MmollToMgdl
-
-        lateinit var mContext: Context
-    }
-
-    private val WAKEUP_COMMAND = "cb010000"
-    private val ACK_ON_WAKEUP_ANSWER = "810a00"
-    private val SLEEP_COMMAND = "010c0e00"
-
-    //private static final String GET_SERIAL_NUMBER_COMMAND = "010d0e0100";
-    private val GET_PATCH_INFO_COMMAND = "010d0900"
-
-    private val UNKNOWN1_COMMAND = "010d0b00"
-    private val UNKNOWN2_COMMAND = "010d0a00"
-
-    private val GET_SENSOR_TIME_COMMAND = "010d0e0127"     // read single block #0x27
-    private val GET_NOW_DATA_INDEX_COMMAND = "010d0e0103"  // read single block #0x03
-    //private static final String getNowGlucoseData = "9999999999";
-    //private static final String GET_TREND_DATA_COMMAND = "010d0f02030c";
-    //private static final String GET_HISTORIC_DATA_COMMAND getHistoricData = "010d0f020f18";
-    private val READ_SINGLE_BLOCK_COMMAND_PREFIX = "010d0e010"
-    private val READ_SINGLE_BLOCK_COMMAND_PREFIX_SHORT = "010d0e01"
-    private val GET_HISTORIC_DATA_COMMAND_ALL_BLOCKS = "010d0f02002b" // read all blocks from 0 to 0x2B
-
-    private val PATCH_INFO_RESPONSE_PREFIX = "8bd9"
-    private val SINGLE_BLOCK_INFO_RESPONSE_PREFIX = "8bde"
-    private val MULTIPLE_BLOCK_RESPONSE_INDEX = "8bdf"
-    //private static final String SENSOR_TIME_RESPONSE_PREFIX = "8bde27";
-    private val BLUCON_ACK_RESPONSE = "8b0a00"
-    private val BLUCON_NAK_RESPONSE_PREFIX = "8b1a02"
-
-    private val BLUCON_UNKNOWN1_COMMAND_RESPONSE = "8bdb0101041711"
-    private val BLUCON_UNKNOWN2_COMMAND_RESPONSE = "8bdaaa"
-    private val BLUCON_UNKNOWN2_COMMAND_RESPONSE_BATTERY_LOW = "8bda02"
-
-    private val BLUCON_NAK_RESPONSE_ERROR09 = "8b1a020009"
-    private val BLUCON_NAK_RESPONSE_ERROR14 = "8b1a020014"
-
-    private val PATCH_NOT_FOUND_RESPONSE = "8b1a02000f"
-    private val PATCH_READ_ERROR = "8b1a020011"
-
-    // we guess that this two commands indicate a low battery state
-    private val BLUCON_BATTERY_LOW_INDICATION1 = "cb020000"
-    private val BLUCON_BATTERY_LOW_INDICATION2 = "cbdb0000"
-
-    private val POSITION_OF_SENSOR_STATUS_BYTE = 17
-
-    private var currentCommand: String = ""
 
     private var mBluetoothAdapter: BluetoothAdapter? = null
     private var mBluetoothManager: BluetoothManager? = null
@@ -137,6 +74,66 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     private lateinit var mLeDeviceAdapter: LeDeviceListAdapter
     private lateinit var mGattCharacteristic: MutableList<BluetoothGattCharacteristic>
 
+    var currentCommand: String = ""
+
+    private lateinit var mClient: OkHttpClient
+    private lateinit var mRequest: Request
+
+    companion object {
+        const val SCAN_PERIOD: Long = 10000
+        const val STATE_DISCONNECTED = 0
+        const val STATE_CONNECTING = 1
+        const val STATE_CONNECTED = 2
+        const val ACTION_GATT_CONNECTED = "com.example.bluetooth.le.ACTION_GATT_CONNECTED"
+        const val ACTION_GATT_DISCONNECTED = "com.example.bluetooth.le.ACTION_GATT_DISCONNECTED"
+        const val ACTION_GATT_SERVICES_DISCOVERED =
+            "com.example.bluetooth.le.ACTION_GATT_SERVICES_DISCOVERED"
+        const val ACTION_DATA_AVAILABLE = "com.example.bluetooth.le.ACTION_DATA_AVAILABLE"
+        const val EXTRA_DATA = "com.example.bluetooth.le.EXTRA_DATA"
+        const val ACTION_DATA_WRITTEN = "com.example.bluetooth.ACTION_DATA_WRITTEN"
+
+        const val WAKEUP_COMMAND = "cb010000"
+        const val ACK_ON_WAKEUP_ANSWER = "810a00"
+        const val SLEEP_COMMAND = "010c0e00"
+
+        const val GET_PATCH_INFO_COMMAND = "010d0900"
+
+        const val UNKNOWN1_COMMAND = "010d0b00"
+        const val UNKNOWN2_COMMAND = "010d0a00"
+
+        const val GET_SENSOR_TIME_COMMAND = "010d0e0127"     // read single block #0x27
+        const val GET_NOW_DATA_INDEX_COMMAND = "010d0e0103"  // read single block #0x03
+        const val READ_SINGLE_BLOCK_COMMAND_PREFIX = "010d0e010"
+        const val READ_SINGLE_BLOCK_COMMAND_PREFIX_SHORT = "010d0e01"
+        const val GET_HISTORIC_DATA_COMMAND_ALL_BLOCKS = "010d0f02002b" // read all blocks from 0 to 0x2B
+
+        const val PATCH_INFO_RESPONSE_PREFIX = "8bd9"
+        const val SINGLE_BLOCK_INFO_RESPONSE_PREFIX = "8bde"
+        const val MULTIPLE_BLOCK_RESPONSE_INDEX = "8bdf"
+        const val BLUCON_ACK_RESPONSE = "8b0a00"
+        const val BLUCON_NAK_RESPONSE_PREFIX = "8b1a02"
+
+        const val BLUCON_UNKNOWN1_COMMAND_RESPONSE = "8bdb0101041711"
+        const val BLUCON_UNKNOWN2_COMMAND_RESPONSE = "8bdaaa"
+        const val BLUCON_UNKNOWN2_COMMAND_RESPONSE_BATTERY_LOW = "8bda02"
+
+        const val BLUCON_NAK_RESPONSE_ERROR09 = "8b1a020009"
+        const val BLUCON_NAK_RESPONSE_ERROR14 = "8b1a020014"
+
+        const val PATCH_NOT_FOUND_RESPONSE = "8b1a02000f"
+        const val PATCH_READ_ERROR = "8b1a020011"
+
+        // we guess that this two commands indicate a low battery state
+        const val BLUCON_BATTERY_LOW_INDICATION1 = "cb020000"
+        const val BLUCON_BATTERY_LOW_INDICATION2 = "cbdb0000"
+
+        const val POSITION_OF_SENSOR_STATUS_BYTE = 17
+        const val MmollToMgdl = 18.0182
+        const val MgdlToMmoll = 1 / MmollToMgdl
+
+        lateinit var mContext: Context
+    }
+
 
     private val mLeScanCallback = BluetoothAdapter.LeScanCallback { device, _, _ ->
         runOnUiThread {
@@ -144,6 +141,14 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             mLeDeviceAdapter.notifyDataSetChanged()
         }
     }
+
+    private val mGlucose: Int = 0
+
+    private val mMeal: Int = 0
+
+    private val mBasal: Int = 0
+
+    private val mBolus: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -159,18 +164,49 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         mBluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager?
         mBluetoothAdapter = mBluetoothManager?.adapter
         mHandler = Handler()
+        mClient = OkHttpClient()
         mLeDeviceAdapter = LeDeviceListAdapter(this)
         listview.adapter = mLeDeviceAdapter
-        listview.setOnItemClickListener { _, _, position, id ->
+        listview.visibility = View.GONE
+        listview.setOnItemClickListener { _, _, position, _ ->
             val device: BluetoothDevice = mLeDeviceAdapter.getDevice(position)
             mBluetoothGatt = device
                 .connectGatt(this, false, mGattCallback)
         }
         searchButton.isEnabled = true
         searchButton.setOnClickListener(this)
-        closeButton.setOnClickListener {
+        disconnectButton.isEnabled = false
+        disconnectButton.setOnClickListener {
             close()
         }
+
+        sendButton.setOnClickListener {
+            val urlBuilder: HttpUrl.Builder = HttpUrl.parse("83.149.249.52")!!.newBuilder()
+            urlBuilder.addQueryParameter("&glucose", mGlucose.toString())
+            urlBuilder.addQueryParameter("&meal", mMeal.toString())
+            urlBuilder.addQueryParameter("&basal", mBasal.toString())
+            urlBuilder.addQueryParameter("&bolus", mBolus.toString())
+            val url = urlBuilder.build().toString()
+
+            mRequest = Request.Builder()
+                .url(url)
+                .build()
+
+            mClient.newCall(mRequest).enqueue(object : Callback {
+                override fun onResponse(call: Call, response: Response) {
+                    if (!response.isSuccessful) {
+                        throw IOException("Unexpected code $response")
+                    } else {
+                        showText(response.body()!!.string())
+                    }
+                }
+
+                override fun onFailure(call: Call, e: IOException) {
+                    e.printStackTrace()
+                }
+            })
+        }
+
     }
 
     override fun onClick(v: View?) {
@@ -183,132 +219,11 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 startActivityForResult(enableBtIntent, 1)
             }
         }
-
+        listview.visibility = View.VISIBLE
         mScanning = true
         scanDevices(mScanning)
     }
 
-    private fun scanDevices(enable: Boolean) {
-        searchButton.isEnabled = !mScanning
-        when (enable) {
-            true -> {
-                mHandler.postDelayed({
-                    mScanning = false
-                    mBluetoothAdapter?.stopLeScan(mLeScanCallback)
-                    searchButton.isEnabled = true
-                }, SCAN_PERIOD)
-                mScanning = true
-                mBluetoothAdapter?.startLeScan(mLeScanCallback)
-            }
-            else -> {
-                mScanning = false
-                mBluetoothAdapter?.stopLeScan(mLeScanCallback)
-            }
-        }
-    }
-
-    private val mGattCallback = object : BluetoothGattCallback() {
-        override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
-            mGatt = gatt!!
-            val intentAction: String
-            when (newState) {
-                BluetoothProfile.STATE_CONNECTED -> {
-                    intentAction = ACTION_GATT_CONNECTED
-                    mConnectionState = STATE_CONNECTED
-                    broadcastUpdate(intentAction)
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        val ans: Boolean = gatt.discoverServices()
-                        Log.d(TAG, "Connected to GATT server $ans.")
-                    }, 1000)
-                    Log.d(TAG, "Connected to GATT server.")
-                }
-                BluetoothProfile.STATE_DISCONNECTED -> {
-                    intentAction = ACTION_GATT_DISCONNECTED
-                    mConnectionState = STATE_DISCONNECTED
-                    Log.d(TAG, "Disconnected from GATT server.")
-                    broadcastUpdate(intentAction)
-                }
-            }
-        }
-
-        override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
-            mGatt = gatt!!
-            mBondingState = mGatt.device.bondState
-            if (mBondingState != BluetoothDevice.BOND_BONDED) {
-                mGatt.device.createBond()
-                waitFor(1000)
-                mBondingState = mGatt.device.bondState
-                if (mBondingState != BluetoothDevice.BOND_BONDED) {
-                    Log.d(TAG, "onServicesDiscovered: Pairing appeared to fail")
-                }
-            } else {
-                Log.d(TAG, "onServicesDiscovered: Device is already bonded")
-            }
-
-            mService = gatt.getService(desiredServiceUUID)
-            mWriteCharacteristic = mService.getCharacteristic(desiredTransmitCharacteristicUUID)
-            mReadCharacteristic = mService.getCharacteristic(desiredReceiveCharacteristicUUID)
-
-            val charaProp = mReadCharacteristic.properties
-            if ((charaProp and BluetoothGattCharacteristic.PROPERTY_NOTIFY) > 0) {
-                Log.d(TAG, "onServicesDiscovered: Setting notification on characteristic")
-                val result = mGatt.setCharacteristicNotification(mReadCharacteristic, true)
-                if (!result) Log.d(TAG, "onServicesDiscovered: Failed seeting notification on blukon")
-            } else {
-                Log.d(TAG, "onServicesDiscovered: Unusual error")
-            }
-            mGatt.readCharacteristic(mReadCharacteristic)
-        }
-
-        override fun onCharacteristicRead(
-            gatt: BluetoothGatt?,
-            characteristic: BluetoothGattCharacteristic?,
-            status: Int
-        ) {
-            onCharacteristicChanged(gatt, characteristic)
-        }
-
-        override fun onCharacteristicWrite(
-            gatt: BluetoothGatt?,
-            characteristic: BluetoothGattCharacteristic?,
-            status: Int
-        ) {
-            when (status) {
-                BluetoothGatt.GATT_SUCCESS -> {
-                    Log.d(TAG, "onCharacteristicWrite: OK")
-                }
-                else -> {
-                    Log.d(TAG, "onCharacteristicWrite: Failed :C")
-                }
-            }
-        }
-
-        override fun onCharacteristicChanged(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?) {
-            Log.d(TAG, "onCharacteristicChanged: ${characteristic!!.value.toString()}")
-            val data = characteristic.value
-            if (data != null && data.isNotEmpty()) {
-                setSerialDataToTransmitterRawData(data)
-            }
-        }
-
-        private fun broadcastUpdate(action: String) {
-            val intent = Intent(action)
-            sendBroadcast(intent)
-        }
-
-        private fun broadcastUpdate(action: String, characteristic: BluetoothGattCharacteristic?) {
-            val intent = Intent(action)
-            when (characteristic!!.uuid) {
-                desiredTransmitCharacteristicUUID -> {
-                    //GlucoseReadingRx
-                }
-                else -> {
-                    Log.d(TAG, "broadcastUpdate: No matches")
-                }
-            }
-
-        }
-    }
 
     private fun setSerialDataToTransmitterRawData(buffer: ByteArray) {
         val reply = decodeBlukonPacket(buffer)
@@ -339,7 +254,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             Log.d(TAG, "writeChar: Error writing characteristic")
             val resendCharacteristic: BluetoothGattCharacteristic = cloner.shallowClone(localmCharacteristic)
             waitFor(1000)
-            JoHH.runOnUiThreadDelayed(Runnable {
+            JoHH.runOnUiThreadDelayed({
                 kotlin.run {
                     val newResult = mGatt.writeCharacteristic(resendCharacteristic)
                     if (!newResult) Log.d(TAG, "writeChar: Error writing char on 2nd try")
@@ -371,7 +286,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         mMinutesDiffToLastReading = (((JoHH.tsl() - mPersistentTimeLastBg) / 1000 + 30) / 60).toInt()
         Log.i(
             TAG,
-            "m_minutesDiffToLastReading=" + mMinutesDiffToLastReading + ", last reading: " + JoHH.dateTimeText(
+            "m_minutesDiffToLastReading=$mMinutesDiffToLastReading, last reading: " + JoHH.dateTimeText(
                 mPersistentTimeLastBg
             )
         )
@@ -649,7 +564,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
             cmdFound = 1
             val currentGlucose = nowGetGlucoseValue(buffer)
-            val currentGlucoseMMol = currentGlucose
 
             Log.i(TAG, "********got getNowGlucoseData=$currentGlucose")
             showText("Current glucose: $currentGlucose")
@@ -765,9 +679,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             Log.i(TAG, "Send sleep cmd")
             mCommunicationStarted = false
 
-
-            val tagId = PersistentStore.getString("LibreSN")
-
             PersistentStore.setLong("blukon-time-of-last-reading", now)
             Log.i(TAG, "time of current reading: " + JoHH.dateTimeText(now))
         } else {
@@ -776,15 +687,13 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
 
     private fun nowGetGlucoseValue(input: ByteArray): Int {
-        val curGluc: Int
         val rawGlucose: Long
 
         // option to use 13 bit mask
         //final boolean thirteen_bit_mask = Pref.getBooleanDefaultFalse("testing_use_thirteen_bit_mask");
-        val thirteenBitMask = true
         // grep 2 bytes with BG data from input bytearray, mask out 12 LSB bits and rescale for xDrip+
         rawGlucose =
-            (input[3 + mNowGlucoseOffset + 1].toLong() and if (thirteenBitMask) 0x1F else 0x0F).shl(8) or (input[3 + mNowGlucoseOffset].toLong() and 0xFF)
+            (input[3 + mNowGlucoseOffset + 1].toLong() and 0x1F).shl(8) or (input[3 + mNowGlucoseOffset].toLong() and 0xFF)
         Log.i(TAG, "rawGlucose=$rawGlucose, m_nowGlucoseOffset=$mNowGlucoseOffset")
 
         // rescale
@@ -795,7 +704,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private fun blockNumberForNowGlucoseData(input: ByteArray): Int {
         var nowGlucoseIndex2: Int = (input[5] and 0x0F).toInt()
-        var nowGlucoseIndex3: Int
+        val nowGlucoseIndex3: Int
 
         mCurrentTrendIndex = nowGlucoseIndex2
 
@@ -863,7 +772,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private fun isSensorReady(sensorStatusByte: Byte): Boolean {
 
-        var sensorStatusString: String
+        val sensorStatusString: String
         var ret = false
         val qSSB = sensorStatusByte.toInt()
 
@@ -902,6 +811,24 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     fun close() {
         mGatt.close()
         mConnectionState = STATE_DISCONNECTED
+        changeUI(connected = false)
+    }
+
+    private fun changeUI(connected: Boolean) {
+        Handler(Looper.getMainLooper()).post {
+            disconnectButton.isEnabled = connected
+            when (connected) {
+                true -> {
+                    showText(getString(R.string.connected))
+                    listview.visibility = View.GONE
+                }
+                false -> {
+                    showText(getString(R.string.disconnected))
+                    listview.visibility = View.VISIBLE
+                }
+            }
+
+        }
     }
 
     private fun showText(text: String) {
@@ -914,5 +841,117 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     override fun onDestroy() {
         super.onDestroy()
         close()
+    }
+
+    private fun scanDevices(enable: Boolean) {
+        searchButton.isEnabled = !mScanning
+        when (enable) {
+            true -> {
+                mHandler.postDelayed({
+                    mScanning = false
+                    mBluetoothAdapter?.stopLeScan(mLeScanCallback)
+                    searchButton.isEnabled = true
+                }, SCAN_PERIOD)
+                mScanning = true
+                mBluetoothAdapter?.startLeScan(mLeScanCallback)
+            }
+            else -> {
+                mScanning = false
+                mBluetoothAdapter?.stopLeScan(mLeScanCallback)
+            }
+        }
+    }
+
+    private val mGattCallback = object : BluetoothGattCallback() {
+        override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
+            mGatt = gatt!!
+            val intentAction: String
+            when (newState) {
+                BluetoothProfile.STATE_CONNECTED -> {
+                    intentAction = ACTION_GATT_CONNECTED
+                    mConnectionState = STATE_CONNECTED
+                    broadcastUpdate(intentAction)
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        val ans: Boolean = gatt.discoverServices()
+                        changeUI(true)
+                        Log.d(TAG, "Connected to GATT server $ans.")
+                    }, 1000)
+                    Log.d(TAG, "Connected to GATT server.")
+                }
+                BluetoothProfile.STATE_DISCONNECTED -> {
+                    intentAction = ACTION_GATT_DISCONNECTED
+                    mConnectionState = STATE_DISCONNECTED
+                    changeUI(false)
+                    showText(getString(R.string.disconnected))
+                    Log.d(TAG, "Disconnected from GATT server.")
+                    broadcastUpdate(intentAction)
+                }
+            }
+        }
+
+        override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+            mGatt = gatt!!
+            mBondingState = mGatt.device.bondState
+            if (mBondingState != BluetoothDevice.BOND_BONDED) {
+                mGatt.device.createBond()
+                waitFor(1000)
+                mBondingState = mGatt.device.bondState
+                if (mBondingState != BluetoothDevice.BOND_BONDED) {
+                    Log.d(TAG, "onServicesDiscovered: Pairing appeared to fail")
+                }
+            } else {
+                Log.d(TAG, "onServicesDiscovered: Device is already bonded")
+            }
+
+            mService = gatt.getService(desiredServiceUUID)
+            mWriteCharacteristic = mService.getCharacteristic(desiredTransmitCharacteristicUUID)
+            mReadCharacteristic = mService.getCharacteristic(desiredReceiveCharacteristicUUID)
+
+            val charaProp = mReadCharacteristic.properties
+            if ((charaProp and BluetoothGattCharacteristic.PROPERTY_NOTIFY) > 0) {
+                Log.d(TAG, "onServicesDiscovered: Setting notification on characteristic")
+                val result = mGatt.setCharacteristicNotification(mReadCharacteristic, true)
+                if (!result) Log.d(TAG, "onServicesDiscovered: Failed seeting notification on blukon")
+            } else {
+                Log.d(TAG, "onServicesDiscovered: Unusual error")
+            }
+            mGatt.readCharacteristic(mReadCharacteristic)
+        }
+
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?,
+            status: Int
+        ) {
+            onCharacteristicChanged(gatt, characteristic)
+        }
+
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?,
+            status: Int
+        ) {
+            when (status) {
+                BluetoothGatt.GATT_SUCCESS -> {
+                    Log.d(TAG, "onCharacteristicWrite: OK")
+                }
+                else -> {
+                    Log.d(TAG, "onCharacteristicWrite: Failed :C")
+                }
+            }
+        }
+
+        override fun onCharacteristicChanged(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic?) {
+            Log.d(TAG, "onCharacteristicChanged: ${characteristic!!.value}")
+            val data = characteristic.value
+            if (data != null && data.isNotEmpty()) {
+                setSerialDataToTransmitterRawData(data)
+            }
+        }
+
+        private fun broadcastUpdate(action: String) {
+            val intent = Intent(action)
+            sendBroadcast(intent)
+        }
     }
 }

@@ -22,7 +22,7 @@
             android:layout_marginStart="20dp"
             android:layout_marginEnd="20dp"
             android:layout_marginTop="20dp"
-            android:text="Search"
+            android:text="@string/search_for_devices"
             style="@style/searchBtn"/>
 
     <ListView
@@ -43,14 +43,14 @@
             android:layout_height="wrap_content"
             app:layout_constraintStart_toStartOf="@id/listview"
             app:layout_constraintEnd_toEndOf="@id/listview"
-            app:layout_constraintTop_toBottomOf="@id/closeButton"
+            app:layout_constraintTop_toBottomOf="@id/sendButton"
             android:layout_marginTop="20dp"
             android:layout_marginStart="20dp"
             android:layout_marginEnd="20dp"
     />
 
     <Button
-            android:id="@+id/closeButton"
+            android:id="@+id/disconnectButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             app:layout_constraintTop_toBottomOf="@id/listview"
@@ -59,7 +59,19 @@
             android:layout_marginStart="20dp"
             android:layout_marginEnd="20dp"
             android:layout_marginTop="20dp"
-            android:text="Close"
+            android:text="@string/disconnect"
+            style="@style/searchBtn"/>
+    <Button
+            android:id="@+id/sendButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toBottomOf="@id/disconnectButton"
+            app:layout_constraintStart_toStartOf="@id/searchButton"
+            app:layout_constraintEnd_toEndOf="@id/searchButton"
+            android:layout_marginStart="20dp"
+            android:layout_marginEnd="20dp"
+            android:layout_marginTop="20dp"
+            android:text="@string/send"
             style="@style/searchBtn"/>
 
 

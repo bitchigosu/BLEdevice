@@ -1,3 +1,19 @@
 <resources>
     <string name="app_name">BLEdevice</string>
+    <string name="search_for_devices">Search for devices</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="disconnected">Disconnected</string>
+    <string name="connected">Connected</string>
+    <string name="send">Send</string>
+    <string name="glucose">Glucose</string>
+    <string name="meal">Meal</string>
+    <string name="basal_ins">Basal Ins</string>
+    <string name="basal_value">Basal Value</string>
+    <string name="bolus_ins">Bolus Ins</string>
+    <string name="bolus_value">Bolus value</string>
+    <string name="time">Time</string>
+    <string name="date">Date</string>
+    <string name="ip_address">IP Address</string>
+    <string name="client_id">Client ID</string>
+    <string name="save">Save</string>
 </resources>
