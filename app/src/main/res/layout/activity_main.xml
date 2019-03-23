@@ -21,7 +21,6 @@
                 app:layout_constraintTop_toTopOf="parent"
                 app:titleTextColor="@color/white"
                 app:subtitleTextColor="@color/white"
-                android:theme="@style/ThemeOverlay.AppCompat.ActionBar"
                 app:popupTheme="@style/ThemeOverlay.AppCompat.Light"/>
 
         <Button

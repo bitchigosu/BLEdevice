@@ -63,10 +63,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     private var mTimeLastBg: Long = 0
     private var mCurrentTrendIndex: Int = 0
     private var mNowGlucoseOffset: Int = 0
-    private var mGlucose: Int = 0
-    private var mMeal: Int = 0
-    private var mBasal: Int = 0
-    private var mBolus: Int = 0
 
     private val mLock = ReentrantLock()
     private val condition = mLock.newCondition()
@@ -180,16 +176,24 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         }
 
         sendButton.setOnClickListener {
-            val urlBuilder: HttpUrl.Builder = HttpUrl.parse("83.149.249.52")!!.newBuilder()
-            urlBuilder.addQueryParameter("&glucose", mGlucose.toString())
-            urlBuilder.addQueryParameter("&meal", mMeal.toString())
-            urlBuilder.addQueryParameter("&basal", mBasal.toString())
-            urlBuilder.addQueryParameter("&bolus", mBolus.toString())
-            val url = urlBuilder.build().toString()
+            val httpUrl = HttpUrl.Builder()
+                .scheme("https")
+                .host(Pref.getString("IP", "83.149.249.52"))
+                .build()
+            val urlBuilder = httpUrl?.newBuilder()
+            urlBuilder?.addQueryParameter("id", Pref.getString("Client", "0"))
+            urlBuilder?.addQueryParameter("time", Pref.getString("Time", "0"))
+            urlBuilder?.addQueryParameter("date", Pref.getString("Date", "0"))
+            urlBuilder?.addQueryParameter("glucose", Pref.getString("Glucose", "0"))
+            urlBuilder?.addQueryParameter("meal", Pref.getString("Meal", "0"))
+            urlBuilder?.addQueryParameter("basal", Pref.getString("Basal", "0"))
+            urlBuilder?.addQueryParameter("bolus", Pref.getString("Bolus", "0"))
+            val url = urlBuilder?.build().toString()
 
             mRequest = Request.Builder()
                 .url(url)
                 .build()
+            showText(url)
 
             mClient.newCall(mRequest).enqueue(object : Callback {
                 override fun onResponse(call: Call, response: Response) {
@@ -215,7 +219,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     override fun onOptionsItemSelected(item: MenuItem?): Boolean = when (item?.itemId) {
         R.id.settings -> {
-            startActivity(Intent(this,SettingsActivity::class.java))
+            startActivity(Intent(this, SettingsActivity::class.java))
             true
         }
         else -> {
@@ -578,7 +582,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
             cmdFound = 1
             val currentGlucose = nowGetGlucoseValue(buffer)
-            mGlucose = currentGlucose
 
             Log.i(TAG, "********got getNowGlucoseData=$currentGlucose")
             showText("Current glucose: $currentGlucose")
@@ -824,7 +827,8 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     @Synchronized
     fun close() {
-        mGatt.close()
+        if (mGatt != null)
+            mGatt.close()
         mConnectionState = STATE_DISCONNECTED
         changeUI(connected = false)
     }
@@ -851,11 +855,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             uuid_textView.text = "" + uuid_textView.text + "\n" + text
         }
 
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        close()
     }
 
     private fun scanDevices(enable: Boolean) {
