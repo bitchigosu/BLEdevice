@@ -2,7 +2,8 @@ package com.example.bledevice
 
 import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
-import com.example.bledevice.utils.Pref
+import android.view.Menu
+import android.view.MenuItem
 import kotlinx.android.synthetic.main.activity_settings.*
 
 class SettingsActivity : AppCompatActivity() {
@@ -10,6 +11,8 @@ class SettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
+        setSupportActionBar(findViewById(R.id.my_toolbar))
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
         saveButton.setOnClickListener {
             Pref.setInt("Glucose", editText_glucose.text.toString().toInt())

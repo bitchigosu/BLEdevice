@@ -6,6 +6,17 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         tools:context=".MainActivity">
+    <android.support.v7.widget.Toolbar
+            android:id="@+id/my_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="?attr/colorPrimary"
+            android:elevation="4dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:titleTextColor="@color/white"
+            app:subtitleTextColor="@color/white"
+            android:theme="@style/ThemeOverlay.AppCompat.ActionBar"
+            app:popupTheme="@style/ThemeOverlay.AppCompat.Light"/>
 
     <TextView
             android:id="@+id/textView_glucose"
@@ -29,7 +40,7 @@
             android:textAlignment="center"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"/>
+            app:layout_constraintTop_toBottomOf="@id/my_toolbar"/>
 
     <TextView
             android:id="@+id/textView_meal"
@@ -160,7 +171,7 @@
             android:layout_width="match_parent"
             android:layout_height="2dp"
             android:background="?android:attr/listDivider"
-            android:layout_marginTop="20dp"
+            android:layout_margin="20dp"
             app:layout_constraintTop_toBottomOf="@id/dateText"/>
 
     <TextView
@@ -172,7 +183,7 @@
             android:layout_marginEnd="16dp"
             app:layout_constraintTop_toTopOf="@id/IPADDR_View"
             app:layout_constraintBottom_toBottomOf="@id/IPADDR_View"
-            app:layout_constraintEnd_toStartOf="@id/IPADDR_View"/>
+            app:layout_constraintStart_toStartOf="@id/textView_glucose"/>
 
     <EditText
             android:id="@+id/IPADDR_View"
@@ -216,12 +227,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="148dp"
-            android:layout_marginTop="48dp"
             android:layout_marginEnd="148dp"
+            android:layout_marginBottom="10dp"
             android:text="@string/save"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/CLIENTID_View"/>
+            app:layout_constraintBottom_toBottomOf="parent"/>
 
 
 </android.support.constraint.ConstraintLayout>

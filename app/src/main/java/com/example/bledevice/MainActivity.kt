@@ -11,6 +11,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import com.example.bledevice.utils.*
 import kotlinx.android.synthetic.main.activity_main.*
@@ -61,6 +63,10 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     private var mTimeLastBg: Long = 0
     private var mCurrentTrendIndex: Int = 0
     private var mNowGlucoseOffset: Int = 0
+    private var mGlucose: Int = 0
+    private var mMeal: Int = 0
+    private var mBasal: Int = 0
+    private var mBolus: Int = 0
 
     private val mLock = ReentrantLock()
     private val condition = mLock.newCondition()
@@ -142,17 +148,10 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         }
     }
 
-    private val mGlucose: Int = 0
-
-    private val mMeal: Int = 0
-
-    private val mBasal: Int = 0
-
-    private val mBolus: Int = 0
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        setSupportActionBar(findViewById(R.id.my_toolbar))
         mContext = applicationContext
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -207,6 +206,21 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             })
         }
 
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem?): Boolean = when (item?.itemId) {
+        R.id.settings -> {
+            startActivity(Intent(this,SettingsActivity::class.java))
+            true
+        }
+        else -> {
+            super.onOptionsItemSelected(item)
+        }
     }
 
     override fun onClick(v: View?) {
@@ -564,6 +578,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
             cmdFound = 1
             val currentGlucose = nowGetGlucoseValue(buffer)
+            mGlucose = currentGlucose
 
             Log.i(TAG, "********got getNowGlucoseData=$currentGlucose")
             showText("Current glucose: $currentGlucose")

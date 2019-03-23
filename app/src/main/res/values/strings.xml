@@ -16,4 +16,5 @@
     <string name="ip_address">IP Address</string>
     <string name="client_id">Client ID</string>
     <string name="save">Save</string>
+    <string name="settings">Settings</string>
 </resources>
