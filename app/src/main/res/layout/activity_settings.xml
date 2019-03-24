@@ -66,6 +66,16 @@
             app:layout_constraintTop_toBottomOf="@id/editText_glucose"/>
 
     <TextView
+            android:id="@+id/mealValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            tools:text="@string/meal"
+            android:textSize="18sp"
+            app:layout_constraintStart_toEndOf="@id/seekBar_meal"
+            app:layout_constraintTop_toTopOf="@id/seekBar_meal"
+            app:layout_constraintBottom_toBottomOf="@id/seekBar_meal"/>
+
+    <TextView
             android:id="@+id/basalInsText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -131,6 +141,7 @@
             android:text="14:21"
             android:textAlignment="center"
             android:textSize="18sp"
+            android:textColor="#000"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/bolusEditText"/>
@@ -153,6 +164,7 @@
             android:text="21.03.2018"
             android:textAlignment="center"
             android:textSize="18sp"
+            android:textColor="#000"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/timeText"/>

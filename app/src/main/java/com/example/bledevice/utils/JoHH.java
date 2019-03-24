@@ -1,5 +1,6 @@
 package com.example.bledevice.utils;
 
+import android.content.Context;
 import android.os.Handler;
 import android.util.Log;
 import com.example.bledevice.MainActivity;
@@ -16,6 +17,7 @@ public class JoHH {
     public static long tsl() {
         return System.currentTimeMillis();
     }
+
     public static synchronized boolean ratelimit(String name, int seconds) {
         // check if over limit
         if ((rateLimits.containsKey(name)) && (JoHH.tsl() - rateLimits.get(name) < (seconds * 1000L))) {
@@ -26,6 +28,7 @@ public class JoHH {
         rateLimits.put(name, JoHH.tsl());
         return true;
     }
+
     public static synchronized boolean pratelimit(String name, int seconds) {
         // check if over limit
         final long time_now = JoHH.tsl();
@@ -44,6 +47,7 @@ public class JoHH {
         PersistentStore.setLong(name, time_now);
         return true;
     }
+
     public static int parseIntWithDefault(String number, int radix, int defaultVal) {
         try {
             return Integer.parseInt(number, radix);
@@ -52,11 +56,11 @@ public class JoHH {
             return defaultVal;
         }
     }
+
     public static String dateTimeText(long timestamp) {
         return android.text.format.DateFormat.format("yyyy-MM-dd kk:mm:ss", timestamp).toString();
     }
 
-    @Nullable
     public static ByteBuffer bArrayAsBuffer(byte[] bytes) {
         final ByteBuffer bb = ByteBuffer.allocate(bytes.length);
         bb.put(bytes);
@@ -64,7 +68,7 @@ public class JoHH {
     }
 
     public static boolean runOnUiThreadDelayed(Runnable theRunnable, long delay) {
-        final Handler mainHandler = new Handler(MainActivity.mContext.getApplicationContext().getMainLooper());
+        final Handler mainHandler = new Handler(MainActivity.mContext.getMainLooper());
         return mainHandler.postDelayed(theRunnable, delay);
     }
 

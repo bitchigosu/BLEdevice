@@ -42,7 +42,7 @@ class LeDeviceListAdapter(private val context: Context) : BaseAdapter() {
         if (device.name != null)
             deviceName.text = device.name
         else
-            deviceName.text = "<none>"
+            deviceName.text = context.getString(R.string.none)
         Log.d(TAG, "getView:${device.name}")
         macAddress.text = device.address
 

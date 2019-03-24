@@ -14,6 +14,7 @@ import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.Toast
 import com.example.bledevice.utils.*
 import kotlinx.android.synthetic.main.activity_main.*
 import java.nio.ByteBuffer
@@ -28,13 +29,13 @@ import java.io.IOException
 
 
 class MainActivity : AppCompatActivity(), View.OnClickListener {
+
     private val TAG = "MainActivity"
     private val REQUEST_COARSE_LOCATION = 2
     private var mConnectionState = STATE_DISCONNECTED
     private val desiredTransmitCharacteristicUUID: UUID = UUID.fromString("436AA6E9-082E-4CE8-A08B-01D81F195B24")
     private val desiredReceiveCharacteristicUUID: UUID = UUID.fromString("436A0C82-082E-4CE8-A08B-01D81F195B24")
     private val desiredServiceUUID: UUID = UUID.fromString("436A62C0-082E-4CE8-A08B-01D81F195B24")
-    private val descriptorUUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
     private lateinit var mGatt: BluetoothGatt
     private lateinit var mService: BluetoothGattService
@@ -74,7 +75,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     var mBluetoothGatt: BluetoothGatt? = null
     private lateinit var mHandler: Handler
     private lateinit var mLeDeviceAdapter: LeDeviceListAdapter
-    private lateinit var mGattCharacteristic: MutableList<BluetoothGattCharacteristic>
 
     var currentCommand: String = ""
 
@@ -148,7 +148,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         setSupportActionBar(findViewById(R.id.my_toolbar))
-        mContext = applicationContext
+        mContext = this
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -175,6 +175,8 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             close()
         }
 
+        sendButton.isEnabled = true
+
         sendButton.setOnClickListener {
             val httpUrl = HttpUrl.Builder()
                 .scheme("https")
@@ -198,8 +200,10 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             mClient.newCall(mRequest).enqueue(object : Callback {
                 override fun onResponse(call: Call, response: Response) {
                     if (!response.isSuccessful) {
+                        Toast.makeText(MainActivity.mContext, "Values hasn't been send", Toast.LENGTH_SHORT).show()
                         throw IOException("Unexpected code $response")
                     } else {
+                        Toast.makeText(MainActivity.mContext, "Values has been send", Toast.LENGTH_SHORT).show()
                         showText(response.body()!!.string())
                     }
                 }
@@ -836,6 +840,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     private fun changeUI(connected: Boolean) {
         Handler(Looper.getMainLooper()).post {
             disconnectButton.isEnabled = connected
+            sendButton.isEnabled = !connected
             when (connected) {
                 true -> {
                     showText(getString(R.string.connected))
@@ -884,6 +889,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 BluetoothProfile.STATE_CONNECTED -> {
                     intentAction = ACTION_GATT_CONNECTED
                     mConnectionState = STATE_CONNECTED
+                    Pref.setString("Mac", mGatt.device.address)
                     broadcastUpdate(intentAction)
                     Handler(Looper.getMainLooper()).postDelayed({
                         val ans: Boolean = gatt.discoverServices()

@@ -10,6 +10,9 @@ import java.text.DateFormat
 import java.util.*
 import android.app.TimePickerDialog
 import android.text.Editable
+import android.view.Menu
+import android.view.MenuItem
+import android.widget.SeekBar
 import android.widget.Toast
 import java.text.SimpleDateFormat
 
@@ -40,12 +43,53 @@ class SettingsActivity : AppCompatActivity() {
             Pref.setString("Basal", basalEditText.checkForNull())
             Pref.setString("Bolus", bolusEditText.checkForNull())
             Pref.setString("IP", IPADDR_View.checkForNull())
-            Pref.setString("Client", CLIENTID_View.checkForNull())
+            Pref.setString("Client", CLIENTID_View.checkForNull().replace(":", "_"))
             Pref.setString("Time", timeText.text.toString().replace(":", "_"))
             Pref.setString("Date", dateText.text.toString().replace(".", "_"))
             Toast.makeText(this, "Saved!", Toast.LENGTH_SHORT).show()
             finish()
         }
+
+        seekBar_meal.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                mealValue.text = seekBar?.progress.toString()
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+
+            }
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+
+            }
+
+        })
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.settings_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem?): Boolean = when (item?.itemId) {
+        R.id.resetBtn -> {
+            resetValues()
+            true
+        }
+        android.R.id.home -> {
+            finish()
+            true
+        }
+        else -> {
+            super.onOptionsItemSelected(item)
+        }
+    }
+
+    private fun resetValues() {
+        editText_glucose.text.clear()
+        seekBar_meal.progress = 0
+        basalEditText.text.clear()
+        bolusEditText.text.clear()
     }
 
     private fun updateTimeAndDate() {
@@ -57,7 +101,7 @@ class SettingsActivity : AppCompatActivity() {
         basalEditText.text = Pref.getString("Basal", "0").toEditable()
         bolusEditText.text = Pref.getString("Bolus", "0").toEditable()
         IPADDR_View.text = Pref.getString("IP", "0").toEditable()
-        CLIENTID_View.text = Pref.getString("Client", "0").toEditable()
+        CLIENTID_View.text = Pref.getString("Mac", "1").toEditable()
         seekBar_meal.progress = Pref.getString("Meal", "0").toInt()
     }
 
