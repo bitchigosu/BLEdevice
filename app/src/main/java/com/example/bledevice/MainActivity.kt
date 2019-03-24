@@ -200,10 +200,10 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             mClient.newCall(mRequest).enqueue(object : Callback {
                 override fun onResponse(call: Call, response: Response) {
                     if (!response.isSuccessful) {
-                        Toast.makeText(MainActivity.mContext, "Values hasn't been send", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(MainActivity.mContext.applicationContext, "Values hasn't been send", Toast.LENGTH_SHORT).show()
                         throw IOException("Unexpected code $response")
                     } else {
-                        Toast.makeText(MainActivity.mContext, "Values has been send", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(MainActivity.mContext.applicationContext, "Values has been send", Toast.LENGTH_SHORT).show()
                         showText(response.body()!!.string())
                     }
                 }

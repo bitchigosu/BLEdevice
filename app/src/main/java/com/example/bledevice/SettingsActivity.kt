@@ -103,6 +103,7 @@ class SettingsActivity : AppCompatActivity() {
         IPADDR_View.text = Pref.getString("IP", "0").toEditable()
         CLIENTID_View.text = Pref.getString("Mac", "1").toEditable()
         seekBar_meal.progress = Pref.getString("Meal", "0").toInt()
+        mealValue.text = Pref.getString("Meal", "0")
     }
 
     private fun showDateDialog(view: View) {
