@@ -917,7 +917,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 BluetoothProfile.STATE_CONNECTED -> {
                     intentAction = ACTION_GATT_CONNECTED
                     mConnectionState = STATE_CONNECTED
-                    Pref.setString("Mac", mGatt.device.address.toString())
+                    Pref.setString("Mac", mGatt.device.address.toString().replace(":", "_"))
                     broadcastUpdate(intentAction)
                     Handler(Looper.getMainLooper()).postDelayed({
                         val ans: Boolean = gatt.discoverServices()
