@@ -20,4 +20,6 @@
     <string name="def_83_149_249_52">def: 83.149.249.52</string>
     <string name="reset">Reset</string>
     <string name="none"><![CDATA[<none>]]></string>
+    <string name="device_name">Device Name</string>
+    <string name="mac_address">Mac address</string>
 </resources>

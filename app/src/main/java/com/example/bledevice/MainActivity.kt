@@ -10,6 +10,7 @@ import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.method.ScrollingMovementMethod
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
@@ -26,6 +27,8 @@ import kotlin.experimental.and
 import com.rits.cloning.Cloner
 import okhttp3.*
 import java.io.IOException
+import java.text.DateFormat
+import java.text.SimpleDateFormat
 
 
 class MainActivity : AppCompatActivity(), View.OnClickListener {
@@ -160,6 +163,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         mBluetoothAdapter = mBluetoothManager?.adapter
         mHandler = Handler()
         mClient = OkHttpClient()
+
         mLeDeviceAdapter = LeDeviceListAdapter(this)
         listview.adapter = mLeDeviceAdapter
         listview.visibility = View.GONE
@@ -168,8 +172,10 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             mBluetoothGatt = device
                 .connectGatt(this, false, mGattCallback)
         }
+
         searchButton.isEnabled = true
         searchButton.setOnClickListener(this)
+
         disconnectButton.isEnabled = false
         disconnectButton.setOnClickListener {
             close()
@@ -178,43 +184,12 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         sendButton.isEnabled = true
 
         sendButton.setOnClickListener {
-            val httpUrl = HttpUrl.Builder()
-                .scheme("https")
-                .host(Pref.getString("IP", "83.149.249.52"))
-                .build()
-            val urlBuilder = httpUrl?.newBuilder()
-            urlBuilder?.addQueryParameter("id", Pref.getString("Client", "0"))
-            urlBuilder?.addQueryParameter("time", Pref.getString("Time", "0"))
-            urlBuilder?.addQueryParameter("date", Pref.getString("Date", "0"))
-            urlBuilder?.addQueryParameter("glucose", Pref.getString("Glucose", "0"))
-            urlBuilder?.addQueryParameter("meal", Pref.getString("Meal", "0"))
-            urlBuilder?.addQueryParameter("basal", Pref.getString("Basal", "0"))
-            urlBuilder?.addQueryParameter("bolus", Pref.getString("Bolus", "0"))
-            val url = urlBuilder?.build().toString()
-
-            mRequest = Request.Builder()
-                .url(url)
-                .build()
-            showText(url)
-
-            mClient.newCall(mRequest).enqueue(object : Callback {
-                override fun onResponse(call: Call, response: Response) {
-                    if (!response.isSuccessful) {
-                        Toast.makeText(MainActivity.mContext.applicationContext, "Values hasn't been send", Toast.LENGTH_SHORT).show()
-                        throw IOException("Unexpected code $response")
-                    } else {
-                        Toast.makeText(MainActivity.mContext.applicationContext, "Values has been send", Toast.LENGTH_SHORT).show()
-                        showText(response.body()!!.string())
-                    }
-                }
-
-                override fun onFailure(call: Call, e: IOException) {
-                    e.printStackTrace()
-                }
-            })
+            sendData()
         }
 
+        uuid_textView.movementMethod = ScrollingMovementMethod()
     }
+
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.menu, menu)
@@ -256,6 +231,47 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
     private fun sendBtMessage(reply: ByteArray?): Boolean {
         return sendBtMessage(JoHH.bArrayAsBuffer(reply))
+    }
+
+    private fun sendData() {
+        val httpUrl = HttpUrl.Builder()
+            .scheme("https")
+            .host(Pref.getString("IP", "83.149.249.52"))
+            .build()
+        val urlBuilder = httpUrl?.newBuilder()
+        urlBuilder?.addQueryParameter("id", Pref.getString("Mac", "0"))
+        urlBuilder?.addQueryParameter("time", Pref.getString("Time", "0"))
+        urlBuilder?.addQueryParameter("date", Pref.getString("Date", "0"))
+        urlBuilder?.addQueryParameter("glucose", Pref.getString("Glucose", "0"))
+        urlBuilder?.addQueryParameter("meal", Pref.getString("Meal", "0"))
+        urlBuilder?.addQueryParameter("basal", Pref.getString("Basal", "0"))
+        urlBuilder?.addQueryParameter("bolus", Pref.getString("Bolus", "0"))
+        val url = urlBuilder?.build().toString()
+
+        mRequest = Request.Builder()
+            .url(url)
+            .build()
+
+        mClient.newCall(mRequest).enqueue(object : Callback {
+            override fun onResponse(call: Call, response: Response) {
+                if (!response.isSuccessful) {
+                    Toast.makeText(
+                        MainActivity.mContext.applicationContext,
+                        "Values hasn't been send",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    throw IOException("Unexpected code $response")
+                } else {
+                    Toast.makeText(MainActivity.mContext.applicationContext, "Values has been send", Toast.LENGTH_SHORT)
+                        .show()
+                    showText(response.body()!!.string())
+                }
+            }
+
+            override fun onFailure(call: Call, e: IOException) {
+                e.printStackTrace()
+            }
+        })
     }
 
     @Synchronized
@@ -585,7 +601,19 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
             }
 
             cmdFound = 1
+
             val currentGlucose = nowGetGlucoseValue(buffer)
+            val simpleDateFormat = SimpleDateFormat("HH:mm", Locale.UK)
+            Pref.setString("Glucose", currentGlucose.toString())
+            Pref.setString(
+                "Time",
+                simpleDateFormat.format(mTimeLastCmdReceived).toString().replace(":", "_")
+            )
+            Pref.setString(
+                "Date",
+                DateFormat.getDateInstance(3).format(mTimeLastCmdReceived).toString().replace(".", "_")
+            )
+            sendData()
 
             Log.i(TAG, "********got getNowGlucoseData=$currentGlucose")
             showText("Current glucose: $currentGlucose")
@@ -889,7 +917,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 BluetoothProfile.STATE_CONNECTED -> {
                     intentAction = ACTION_GATT_CONNECTED
                     mConnectionState = STATE_CONNECTED
-                    Pref.setString("Mac", mGatt.device.address)
+                    Pref.setString("Mac", mGatt.device.address.toString())
                     broadcastUpdate(intentAction)
                     Handler(Looper.getMainLooper()).postDelayed({
                         val ans: Boolean = gatt.discoverServices()

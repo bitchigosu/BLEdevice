@@ -43,7 +43,7 @@ class SettingsActivity : AppCompatActivity() {
             Pref.setString("Basal", basalEditText.checkForNull())
             Pref.setString("Bolus", bolusEditText.checkForNull())
             Pref.setString("IP", IPADDR_View.checkForNull())
-            Pref.setString("Client", CLIENTID_View.checkForNull().replace(":", "_"))
+            Pref.setString("Mac", CLIENTID_View.checkForNull().replace(":", "_"))
             Pref.setString("Time", timeText.text.toString().replace(":", "_"))
             Pref.setString("Date", dateText.text.toString().replace(".", "_"))
             Toast.makeText(this, "Saved!", Toast.LENGTH_SHORT).show()
