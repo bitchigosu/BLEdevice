@@ -234,8 +234,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
 
     private fun sendData() {
-        showText("Sending values...")
-
         val newUrl = HttpUrl.parse("http://${Pref.getString("IP","83.149.249.52:8888")}")
 
         val urlBuilder = newUrl?.newBuilder()
@@ -247,6 +245,8 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         urlBuilder?.addQueryParameter("basal", Pref.getString("Basal", "0"))
         urlBuilder?.addQueryParameter("bolus", Pref.getString("Bolus", "0"))
         val url = urlBuilder?.build().toString()
+        showText("Sending values to $url")
+
 
         mRequest = Request.Builder()
             .url(url)
@@ -258,12 +258,12 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                     throw IOException("Unexpected code $response")
                 } else {
                     showText("Values has been send")
+                    showText(response.body()!!.string())
                 }
             }
 
             override fun onFailure(call: Call, e: IOException) {
-                e.printStackTrace()
-                showText("Sending failed")
+                showText("Sending failed: ${e.message}")
             }
         })
     }
