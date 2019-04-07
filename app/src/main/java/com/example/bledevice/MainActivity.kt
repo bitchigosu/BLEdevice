@@ -234,11 +234,11 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
 
     private fun sendData() {
-        val httpUrl = HttpUrl.Builder()
-            .scheme("https")
-            .host(Pref.getString("IP", "83.149.249.52"))
-            .build()
-        val urlBuilder = httpUrl?.newBuilder()
+        showText("Sending values...")
+
+        val newUrl = HttpUrl.parse("http://${Pref.getString("IP","83.149.249.52:8888")}")
+
+        val urlBuilder = newUrl?.newBuilder()
         urlBuilder?.addQueryParameter("id", Pref.getString("Mac", "0"))
         urlBuilder?.addQueryParameter("time", Pref.getString("Time", "0"))
         urlBuilder?.addQueryParameter("date", Pref.getString("Date", "0"))
@@ -255,21 +255,15 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         mClient.newCall(mRequest).enqueue(object : Callback {
             override fun onResponse(call: Call, response: Response) {
                 if (!response.isSuccessful) {
-                    Toast.makeText(
-                        MainActivity.mContext.applicationContext,
-                        "Values hasn't been send",
-                        Toast.LENGTH_SHORT
-                    ).show()
                     throw IOException("Unexpected code $response")
                 } else {
-                    Toast.makeText(MainActivity.mContext.applicationContext, "Values has been send", Toast.LENGTH_SHORT)
-                        .show()
-                    showText(response.body()!!.string())
+                    showText("Values has been send")
                 }
             }
 
             override fun onFailure(call: Call, e: IOException) {
                 e.printStackTrace()
+                showText("Sending failed")
             }
         })
     }
@@ -602,7 +596,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
             cmdFound = 1
 
-            val currentGlucose = nowGetGlucoseValue(buffer)
+            val currentGlucose = nowGetGlucoseValue(buffer) / 192
             val simpleDateFormat = SimpleDateFormat("HH:mm", Locale.UK)
             Pref.setString("Glucose", currentGlucose.toString())
             Pref.setString(
