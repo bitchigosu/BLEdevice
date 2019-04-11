@@ -243,7 +243,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         val meal = Pref.getString("Meal", "0")
         val basal = Pref.getString("Basal", "0")
         val bolus = Pref.getString("Bolus", "0")
-        val divider = Pref.getString("Divider","1")
+        val divider = Pref.getString("Divider", "1")
         if (meal != "0") strBuilder.append("&meal=$meal")
         if (basal != "0") strBuilder.append("&basal=$basal")
         if (bolus != "0") strBuilder.append("&bolus=$bolus")
@@ -605,8 +605,8 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
             cmdFound = 1
 
-            val divider = Pref.getString("Divider","1").toDouble()
-            val currentGlucose = nowGetGlucoseValue(buffer) / divider
+            val divider = Pref.getString("Divider", "1").toDouble()
+            val currentGlucose: Double = nowGetGlucoseValue(buffer) / divider
             val simpleDateFormat = SimpleDateFormat("HH:mm", Locale.UK)
             Pref.setString("Glucose", currentGlucose.toString())
             Pref.setString(

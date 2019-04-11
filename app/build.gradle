@@ -33,4 +33,5 @@ dependencies {
     implementation 'de.hdodenhof:circleimageview:3.0.0'
     implementation 'uk.com.robust-it:cloning:1.9.5'
     implementation 'com.squareup.okhttp3:okhttp:3.11.0'
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.1.1"
 }

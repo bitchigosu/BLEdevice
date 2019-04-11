@@ -11,23 +11,27 @@ import java.text.DateFormat
 import java.util.*
 import android.app.TimePickerDialog
 import android.text.Editable
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.SeekBar
 import android.widget.Toast
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 
 
 class SettingsActivity : AppCompatActivity() {
     private val dateAndTime = Calendar.getInstance()
+    private val TAG = "SettingsActivity"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
+        updateValues()
         setSupportActionBar(findViewById(R.id.my_toolbar))
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-
-        updateValues()
 
         timeText.setOnClickListener {
             showTimeDialog(it)
@@ -73,6 +77,7 @@ class SettingsActivity : AppCompatActivity() {
             }
 
         })
+        Log.d(TAG, "onCreate: end")
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -106,14 +111,17 @@ class SettingsActivity : AppCompatActivity() {
         timeText.text = sdf.format(dateAndTime.timeInMillis).toString()
         dateText.text = DateFormat.getDateInstance(3).format(dateAndTime.timeInMillis).toString()
 
-        editText_glucose.text = Pref.getString("Glucose", "0").toEditable()
-        basalEditText.text = Pref.getString("Basal", "0").toEditable()
-        bolusEditText.text = Pref.getString("Bolus", "0").toEditable()
-        IPADDR_View.text = Pref.getString("IP", "83.149.249.16:8888").toEditable()
-        CLIENTID_View.text = Pref.getString("Mac", "1").toEditable()
-        seekBar_meal.progress = Pref.getString("Meal", "0").toInt()
-        mealValue.text = Pref.getString("Meal", "0")
-        divider.text = Pref.getString("Divider", "1").toEditable()
+        GlobalScope.launch {
+            editText_glucose.text = Pref.getString("Glucose", "0").toEditable()
+            basalEditText.text = Pref.getString("Basal", "0").toEditable()
+            bolusEditText.text = Pref.getString("Bolus", "0").toEditable()
+            IPADDR_View.text = Pref.getString("IP", "83.149.249.16:8888").toEditable()
+            CLIENTID_View.text = Pref.getString("Mac", "1").toEditable()
+            seekBar_meal.progress = Pref.getString("Meal", "0").toInt()
+            mealValue.text = Pref.getString("Meal", "0")
+            divider.text = Pref.getString("Divider", "1").toEditable()
+        }
+
     }
 
     private fun showInfoDialog(term: String) {
