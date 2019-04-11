@@ -17,7 +17,7 @@
     <string name="client_id">Client ID</string>
     <string name="save">Save</string>
     <string name="settings">Settings</string>
-    <string name="def_83_149_249_52">def: 83.149.249.52</string>
+    <string name="def_83_149_249_52">def: 83.149.249.16:8888</string>
     <string name="reset">Reset</string>
     <string name="none"><![CDATA[<none>]]></string>
     <string name="device_name">Device Name</string>

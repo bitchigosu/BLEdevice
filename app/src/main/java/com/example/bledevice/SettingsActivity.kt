@@ -27,7 +27,7 @@ class SettingsActivity : AppCompatActivity() {
         setSupportActionBar(findViewById(R.id.my_toolbar))
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
-        updateTimeAndDate()
+        updateValues()
 
         timeText.setOnClickListener {
             showTimeDialog(it)
@@ -92,7 +92,7 @@ class SettingsActivity : AppCompatActivity() {
         bolusEditText.text.clear()
     }
 
-    private fun updateTimeAndDate() {
+    private fun updateValues() {
         val sdf = SimpleDateFormat("HH:mm", Locale.UK)
         timeText.text = sdf.format(dateAndTime.timeInMillis).toString()
         dateText.text = DateFormat.getDateInstance(3).format(dateAndTime.timeInMillis).toString()
@@ -100,7 +100,7 @@ class SettingsActivity : AppCompatActivity() {
         editText_glucose.text = Pref.getString("Glucose", "0").toEditable()
         basalEditText.text = Pref.getString("Basal", "0").toEditable()
         bolusEditText.text = Pref.getString("Bolus", "0").toEditable()
-        IPADDR_View.text = Pref.getString("IP", "0").toEditable()
+        IPADDR_View.text = Pref.getString("IP", "83.149.249.16:8888").toEditable()
         CLIENTID_View.text = Pref.getString("Mac", "1").toEditable()
         seekBar_meal.progress = Pref.getString("Meal", "0").toInt()
         mealValue.text = Pref.getString("Meal", "0")
@@ -125,19 +125,19 @@ class SettingsActivity : AppCompatActivity() {
             .show()
     }
 
-    var d: DatePickerDialog.OnDateSetListener =
+    private var d: DatePickerDialog.OnDateSetListener =
         DatePickerDialog.OnDateSetListener { _, year, monthOfYear, dayOfMonth ->
             dateAndTime.set(Calendar.YEAR, year)
             dateAndTime.set(Calendar.MONTH, monthOfYear)
             dateAndTime.set(Calendar.DAY_OF_MONTH, dayOfMonth)
-            updateTimeAndDate()
+            updateValues()
         }
 
-    var t: TimePickerDialog.OnTimeSetListener =
+    private var t: TimePickerDialog.OnTimeSetListener =
         TimePickerDialog.OnTimeSetListener { _, hourOfDay, minute ->
             dateAndTime.set(Calendar.HOUR_OF_DAY, hourOfDay)
             dateAndTime.set(Calendar.MINUTE, minute)
-            updateTimeAndDate()
+            updateValues()
         }
 
 

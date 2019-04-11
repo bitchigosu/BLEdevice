@@ -22,15 +22,10 @@ public class Pref {
     // cache instance
     private static void initializePrefs() {
         if (prefs == null) {
-            if (MainActivity.mContext.getApplicationContext() != null) {
-                prefs = PreferenceManager.getDefaultSharedPreferences(MainActivity.mContext.getApplicationContext());
-                if ((prefs == null) && (JoHH.ratelimit("prefs-failure1", 20))) {
-                    Log.d(TAG,  "Could not initialize preferences due to init failure!!");
-                }
-            } else {
-                if (JoHH.ratelimit("prefs-failure2", 20)) {
-                    Log.d(TAG, "Could not initialize preferences due to missing context!!");
-                }
+            SuperApp.Companion.getContext();
+            prefs = PreferenceManager.getDefaultSharedPreferences(SuperApp.Companion.getContext());
+            if ((prefs == null) && (JoHH.ratelimit("prefs-failure1", 20))) {
+                Log.d(TAG, "Could not initialize preferences due to init failure!!");
             }
         }
     }

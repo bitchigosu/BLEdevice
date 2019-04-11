@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.util.Log;
 import com.example.bledevice.MainActivity;
+import com.example.bledevice.SuperApp;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.ByteBuffer;
@@ -68,7 +69,7 @@ public class JoHH {
     }
 
     public static boolean runOnUiThreadDelayed(Runnable theRunnable, long delay) {
-        final Handler mainHandler = new Handler(MainActivity.mContext.getMainLooper());
+        final Handler mainHandler = new Handler(SuperApp.Companion.getContext().getMainLooper());
         return mainHandler.postDelayed(theRunnable, delay);
     }
 

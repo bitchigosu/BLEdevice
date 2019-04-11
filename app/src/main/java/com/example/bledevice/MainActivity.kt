@@ -25,6 +25,7 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlin.experimental.and
 import com.rits.cloning.Cloner
+import kotlinx.android.synthetic.main.activity_settings.*
 import okhttp3.*
 import java.io.IOException
 import java.text.DateFormat
@@ -136,7 +137,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         const val MmollToMgdl = 18.0182
         const val MgdlToMmoll = 1 / MmollToMgdl
 
-        lateinit var mContext: Context
     }
 
 
@@ -151,7 +151,6 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         setSupportActionBar(findViewById(R.id.my_toolbar))
-        mContext = this
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -234,22 +233,24 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
     }
 
     private fun sendData() {
-        val newUrl = HttpUrl.parse("http://${Pref.getString("IP","83.149.249.52:8888")}")
+        val strBuilder = StringBuilder("http://${Pref.getString("IP", "83.149.249.16:8888")}")
+        strBuilder.append("?id=${Pref.getString("Mac", "1")}")
+        strBuilder.append("&time=${Pref.getString("Time", "0")}")
+        strBuilder.append("&date=${Pref.getString("Date", "0")}")
+        strBuilder.append("&glucose=${Pref.getString("Glucose", "0")}")
 
-        val urlBuilder = newUrl?.newBuilder()
-        urlBuilder?.addQueryParameter("id", Pref.getString("Mac", "0"))
-        urlBuilder?.addQueryParameter("time", Pref.getString("Time", "0"))
-        urlBuilder?.addQueryParameter("date", Pref.getString("Date", "0"))
-        urlBuilder?.addQueryParameter("glucose", Pref.getString("Glucose", "0"))
-        urlBuilder?.addQueryParameter("meal", Pref.getString("Meal", "0"))
-        urlBuilder?.addQueryParameter("basal", Pref.getString("Basal", "0"))
-        urlBuilder?.addQueryParameter("bolus", Pref.getString("Bolus", "0"))
-        val url = urlBuilder?.build().toString()
-        showText("Sending values to $url")
+        val meal = Pref.getString("Meal", "0")
+        val basal = Pref.getString("Basal", "0")
+        val bolus = Pref.getString("Bolus", "0")
+        if (meal != "0") strBuilder.append("&meal=$meal")
+        if (basal != "0") strBuilder.append("&basal=$basal")
+        if (bolus != "0") strBuilder.append("&bolus=$bolus")
+
+        showText("Sending values to $strBuilder")
 
 
         mRequest = Request.Builder()
-            .url(url)
+            .url(strBuilder.toString())
             .build()
 
         mClient.newCall(mRequest).enqueue(object : Callback {
@@ -266,6 +267,11 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
                 showText("Sending failed: ${e.message}")
             }
         })
+
+/*        Pref.setString("Glucose", "0")
+        Pref.setString("Meal", "0")
+        Pref.setString("Basal", "0")
+        Pref.setString("Bolus", "0")*/
     }
 
     @Synchronized
@@ -596,7 +602,7 @@ class MainActivity : AppCompatActivity(), View.OnClickListener {
 
             cmdFound = 1
 
-            val currentGlucose = nowGetGlucoseValue(buffer) / 192
+            val currentGlucose = nowGetGlucoseValue(buffer) / 192.0
             val simpleDateFormat = SimpleDateFormat("HH:mm", Locale.UK)
             Pref.setString("Glucose", currentGlucose.toString())
             Pref.setString(

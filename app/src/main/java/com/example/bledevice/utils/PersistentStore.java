@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
 import com.example.bledevice.MainActivity;
+import com.example.bledevice.SuperApp;
 
 
 /**
@@ -34,7 +35,7 @@ public class PersistentStore {
     }
 
     private static void init_prefs() {
-        if (prefs == null) prefs = MainActivity.mContext
+        if (prefs == null) prefs = SuperApp.Companion.getContext()
                 .getSharedPreferences(DATA_STORE_INTERNAL, Context.MODE_PRIVATE);
     }
 
@@ -57,7 +58,6 @@ public class PersistentStore {
         if (current.length() > 0) current += delimiter;
         setString(name, current + value);
     }
-
 
 
     public static long getLong(String name) {
