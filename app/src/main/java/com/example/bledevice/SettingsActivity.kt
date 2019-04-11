@@ -1,5 +1,6 @@
 package com.example.bledevice
 
+import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
@@ -18,7 +19,6 @@ import java.text.SimpleDateFormat
 
 
 class SettingsActivity : AppCompatActivity() {
-
     private val dateAndTime = Calendar.getInstance()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,8 +46,17 @@ class SettingsActivity : AppCompatActivity() {
             Pref.setString("Mac", CLIENTID_View.checkForNull())
             Pref.setString("Time", timeText.text.toString().replace(":", "_"))
             Pref.setString("Date", dateText.text.toString().replace(".", "_"))
+            Pref.setString("Divider", divider.checkForNull())
             Toast.makeText(this, "Saved!", Toast.LENGTH_SHORT).show()
             finish()
+        }
+
+        info_basal.setOnClickListener {
+            showInfoDialog("basal")
+        }
+
+        info_bolus.setOnClickListener {
+            showInfoDialog("bolus")
         }
 
         seekBar_meal.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -104,6 +113,28 @@ class SettingsActivity : AppCompatActivity() {
         CLIENTID_View.text = Pref.getString("Mac", "1").toEditable()
         seekBar_meal.progress = Pref.getString("Meal", "0").toInt()
         mealValue.text = Pref.getString("Meal", "0")
+        divider.text = Pref.getString("Divider", "1").toEditable()
+    }
+
+    private fun showInfoDialog(term: String) {
+        val builder = AlertDialog.Builder(this@SettingsActivity)
+        if (term == "bolus") {
+            builder
+                .setTitle(R.string.bolus_title)
+                .setMessage(R.string.bolus_meaning)
+        } else {
+            builder
+                .setTitle(R.string.basal_title)
+                .setMessage(R.string.basal_meaning)
+        }
+        builder
+            .setCancelable(false)
+            .setPositiveButton(R.string.ok_button) { dialog, _ ->
+                dialog.cancel()
+            }
+        val dialog = builder.create()
+        dialog.setCancelable(false)
+        dialog.show()
     }
 
     private fun showDateDialog(view: View) {

@@ -29,5 +29,16 @@
         <item name="android:layout_marginEnd">20dp</item>
         <item name="android:elevation">1dp</item>
     </style>
+    <style name="info_dialog">
+        <item name="android:layout_width">20dp</item>
+        <item name="android:layout_height">20dp</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:tint">@color/grey</item>
+    </style>
+    <style name="labels_textView">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">18sp</item>
+    </style>
 
 </resources>

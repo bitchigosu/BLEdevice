@@ -22,4 +22,27 @@
     <string name="none"><![CDATA[<none>]]></string>
     <string name="device_name">Device Name</string>
     <string name="mac_address">Mac address</string>
+    <string name="ok_button">OK</string>
+
+
+    <string name="bolus_title">What is bolus insulin?</string>
+    <string name="basal_title">What is basal insulin?</string>
+
+    <string name="basal_meaning">The role of basal insulin, also known as background insulin, is to keep blood glucose
+        levels at consistent levels during periods of fasting. When fasting, the body steadily releases glucose into the
+        blood to our cells supplied with energy. Basal insulin is therefore needed to keep blood glucose levels under
+        control, and to allow the cells to take in glucose for energy. Basal insulin is usually taken once or twice a
+        day depending on the insulin. Basal insulin need to act over a relatively long period of time and therefore
+        basal insulin will either be long acting insulin or intermediate insulin.
+    </string>
+    <string name="bolus_meaning">A bolus dose is insulin that is specifically taken at meal times to keep blood glucose
+        levels under control following a meal. Bolus insulin needs to act quickly and so short acting insulin or rapid
+        acting insulin will be used. Bolus insulin is often taken before meals but some people may be advised to take
+        their insulin during or just after a meal if hypoglycemia needs to be prevented. Your doctor will be able to
+        advise you if you have any
+        questions as to when your bolus insulin should be taken.
+    </string>
+    <string name="divider">Divider</string>
+
+
 </resources>
