@@ -1,16 +1,21 @@
 package com.example.bledevice
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.bluetooth.*
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.content.Intent
-import android.os.Binder
-import android.os.IBinder
+import android.os.*
+import android.support.v4.app.NotificationCompat
 import android.util.Log
 import com.example.bledevice.utils.*
 import com.rits.cloning.Cloner
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
+import okhttp3.*
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.text.DateFormat
 import java.text.SimpleDateFormat
@@ -20,9 +25,7 @@ import kotlin.experimental.and
 
 private val TAG = BluetoothLeService::class.java.simpleName
 
-
-// A service that interacts with the BLE device via the Android BLE API.
-class BluetoothLeService() : Service() {
+class BluetoothLeService : Service() {
 
     private var bondingState: Int = 0
     private var bluetoothDeviceAddress: String? = null
@@ -38,6 +41,34 @@ class BluetoothLeService() : Service() {
     private lateinit var writeCharacteristic: BluetoothGattCharacteristic
     private lateinit var readCharacteristic: BluetoothGattCharacteristic
 
+    private lateinit var okHttpClient: OkHttpClient
+    private lateinit var request: Request
+
+    private val mMessenger = Messenger(InternalHandler())
+    private var mMainActivityMessenger: Messenger? = null
+
+    internal inner class InternalHandler : Handler() {
+        override fun handleMessage(msg: Message) {
+            when (msg.what) {
+                CONNECT -> {
+                    mMainActivityMessenger = msg.replyTo
+                    connect(msg.data.getString("address")!!)
+                }
+                DISCONNECT -> {
+                    disconnect()
+                }
+                SEARCH -> {
+                    mMainActivityMessenger = msg.replyTo
+                    startScan()
+                }
+                SEND_DATA -> {
+                    sendData()
+                }
+                else -> super.handleMessage(msg)
+            }
+        }
+    }
+
     private val cloner: Cloner = Cloner()
 
     private val localBinder = LocalBinder()
@@ -47,16 +78,59 @@ class BluetoothLeService() : Service() {
             get() = this@BluetoothLeService
     }
 
-    override fun onBind(intent: Intent?): IBinder? = localBinder
+    override fun onCreate() {
+        super.onCreate()
+        createNotificationChannel();
+        startForeground(NOTIFICATION_ID, createNotification().build())
+        okHttpClient = OkHttpClient()
+        Log.d(TAG, "onCreate() called");
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "onStartCommand() called");
+        return START_NOT_STICKY
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = mMessenger.binder
     override fun onUnbind(intent: Intent?): Boolean {
         close()
         return super.onUnbind(intent)
     }
 
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID, "Channel name",
+                NotificationManager.IMPORTANCE_DEFAULT
+            )
+
+            channel.description = "CHANNEL DESCRIPTION"
+            val manager = getSystemService(NotificationManager::class.java)
+
+            manager?.createNotificationChannel(channel)
+        }
+    }
+
+    private fun createNotification(): NotificationCompat.Builder {
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("BLE service")
+            .setOnlyAlertOnce(true)
+    }
+
     private fun close() {
         bluetoothGatt?.close()
         connectionState = STATE_DISCONNECTED
-        //changeUI(connected = false)
+        sendMessageUpdateUI(false)
+    }
+
+    private fun startScan() {
+        bluetoothAdapter?.takeIf { it.isDisabled }?.apply {
+            sendMessageEnableBT()
+        }
+        bluetoothAdapter?.takeIf { it.isEnabled }?.apply {
+            scanDevices(true)
+        }
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
@@ -72,20 +146,22 @@ class BluetoothLeService() : Service() {
                         bluetoothGatt.device?.address.toString().replace(":", "_")
                     )
                     broadcastUpdate(intentAction)
-                    /*                   Handler(Looper.getMainLooper()).postDelayed({
-                                           val ans: Boolean = gatt.discoverServices()
-                                           changeUI(true)
-                                           Log.d(TAG, "Connected to GATT server $ans.")
-                                       }, 1000)
-                                       Log.d(TAG, "Connected to GATT server.")*/
+                    GlobalScope.launch(Dispatchers.IO) {
+                        delay(1000)
+                        val ans: Boolean = gatt.discoverServices()
+                        Log.d(TAG, "Connected to GATT server $ans.")
+                        sendMessageUpdateUI(true)
+                        Log.d(TAG, "Connected to GATT server.")
+                    }
                 }
+
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     intentAction = ACTION_GATT_DISCONNECTED
                     connectionState = STATE_DISCONNECTED
-/*                    changeUI(false)
-                    showText(getString(R.string.disconnected))*/
-                    Log.d(TAG, "Disconnected from GATT server.")
                     broadcastUpdate(intentAction)
+                    sendMessageUpdateUI(false)
+                    sendMessageShowText(getString(R.string.disconnected))
+                    Log.d(TAG, "Disconnected from GATT server.")
                 }
             }
         }
@@ -157,16 +233,15 @@ class BluetoothLeService() : Service() {
                 setSerialDataToTransmitterRawData(data)
             }
         }
+    }
 
-        private fun broadcastUpdate(action: String) {
-            val intent = Intent(action)
-            sendBroadcast(intent)
-        }
+    private fun broadcastUpdate(action: String) {
+        val intent = Intent(action)
+        sendBroadcast(intent)
     }
 
     fun connect(address: String): Boolean {
         val device = bluetoothAdapter?.getRemoteDevice(address) ?: return false
-
         bluetoothGatt = device.connectGatt(this, false, gattCallback)
         bluetoothDeviceAddress = address
         connectionState = STATE_DISCONNECTED
@@ -178,6 +253,86 @@ class BluetoothLeService() : Service() {
             return
         }
         bluetoothGatt?.disconnect()
+        stopForeground(true)
+    }
+
+    private fun scanDevices(enable: Boolean) {
+        when (enable) {
+            true -> {
+                GlobalScope.launch(Dispatchers.IO) {
+                    delay(SCAN_PERIOD)
+                    bluetoothAdapter?.bluetoothLeScanner?.stopScan(scanCallback)
+                }
+                bluetoothAdapter?.bluetoothLeScanner?.startScan(scanCallback)
+            }
+            else -> {
+                bluetoothAdapter?.bluetoothLeScanner?.stopScan(scanCallback)
+            }
+        }
+    }
+
+    private fun sendMessageEnableBT() {
+        val message = Message.obtain(null, REQUEST_ENABLE_BT)
+        try {
+            mMainActivityMessenger!!.send(message)
+        } catch (e: RemoteException) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun sendMessageAddDevice(device: BluetoothDevice) {
+        val bundle = Bundle()
+        bundle.putParcelable("device", device)
+        val message = Message.obtain(null, ADD_DEVICE)
+        message.data = bundle
+
+        try {
+            mMainActivityMessenger!!.send(message)
+        } catch (e: RemoteException) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun sendMessageShowText(text: String) {
+        val bundle = Bundle()
+        bundle.putString("text", text)
+        val message = Message.obtain(null, SHOW_TEXT)
+        message.data = bundle
+
+        try {
+            mMainActivityMessenger!!.send(message)
+        } catch (e: RemoteException) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun sendMessageUpdateUI(connected: Boolean) {
+        val bundle = Bundle()
+        bundle.putBoolean("changeUI", connected)
+        val message = Message.obtain(null, CHANGE_UI)
+        message.data = bundle
+
+        try {
+            mMainActivityMessenger!!.send(message)
+        } catch (e: RemoteException) {
+            e.printStackTrace()
+        }
+    }
+
+
+    private val scanCallback = object : ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: ScanResult?) {
+            sendMessageUpdateUI(false)
+            sendMessageAddDevice(result?.device!!)
+        }
+
+        override fun onScanFailed(errorCode: Int) {
+            println("Scan failed")
+        }
+
+        override fun onBatchScanResults(results: MutableList<ScanResult>?) {
+            super.onBatchScanResults(results)
+        }
     }
 
     private fun setSerialDataToTransmitterRawData(buffer: ByteArray) {
@@ -289,12 +444,12 @@ class BluetoothLeService() : Service() {
 
             if (strRecCmd.startsWith(BLUCON_NAK_RESPONSE_ERROR14)) {
                 Log.e(TAG, "Timeout: please wait 5min or push button to restart!")
-                //showText("Timeout: please wait 5min or push button to restart!")
+                sendMessageShowText("Timeout: please wait 5min or push button to restart!")
             }
 
             if (strRecCmd.startsWith(PATCH_NOT_FOUND_RESPONSE)) {
                 Log.e(TAG, "Libre sensor has been removed!")
-                //showText("Libre sensor has been removed!")
+                sendMessageShowText("Libre sensor has been removed!")
             }
 
             if (strRecCmd.startsWith(PATCH_READ_ERROR)) {
@@ -302,7 +457,7 @@ class BluetoothLeService() : Service() {
                     TAG,
                     "Patch read error.. please check the connectivity and re-initiate... or maybe battery is low?"
                 )
-                //showText("Patch read error.. please check the connectivity and re-initiate... or maybe battery is low?")
+                sendMessageShowText("Patch read error.. please check the connectivity and re-initiate... or maybe battery is low?")
                 Pref.setInt("bridge_battery", 1)
                 gotLowBat = true
             }
@@ -347,7 +502,7 @@ class BluetoothLeService() : Service() {
                 Bytes 3 to 10: Serial Number reverse order
                 Byte 2: 04: ?
                 Bytes 0 - 1 (0 indexing) is the ordinary block request answer (0x8B 0xD9).
-
+    
                 Remark: Byte #17 (0 indexing) contains the SensorStatusByte.
             */
 
@@ -360,7 +515,8 @@ class BluetoothLeService() : Service() {
                 Log.i(TAG, "Send ACK")
             } else {
                 Log.e(TAG, "Sensor is not ready, stop!")
-                //showText("Sensor is not ready, stop!")
+                sendMessageShowText("Sensor is not ready, stop!")
+
                 currentCommand = SLEEP_COMMAND
                 Log.i(TAG, "Send sleep cmd")
                 communicationStarted = false
@@ -432,7 +588,7 @@ class BluetoothLeService() : Service() {
 
             val sensorAge = sensorAge(buffer)
             val sensorAgeDays = TimeUnit.SECONDS.toDays(sensorAge.toLong())
-            //showText("Sensor Age: $sensorAgeDays")
+            sendMessageShowText("Sensor Age: $sensorAgeDays")
 
             if (Pref.getBooleanDefaultFalse("external_blukon_algorithm") || getHistoricReadings!!) {
                 // Send the command to getHistoricData (read all blcoks from 0 to 0x2b)
@@ -535,7 +691,7 @@ class BluetoothLeService() : Service() {
             sendData()
 
             Log.i(TAG, "********got getNowGlucoseData=$currentGlucose")
-            //showText("Current glucose: $currentGlucose")
+            sendMessageShowText("Current glucose: $currentGlucose")
 
             if (!getOlderReading) {
 
@@ -543,8 +699,8 @@ class BluetoothLeService() : Service() {
 
                 PersistentStore.setLong("blukon-time-of-last-reading", timeLastBg)
                 Log.i(TAG, "time of current reading: " + JoHH.dateTimeText(timeLastBg))
-//                showText("time of last reading: ${JoHH.dateTimeText(persistentTimeLastBg)}")
-//                showText("time of current reading: " + JoHH.dateTimeText(timeLastBg))
+                sendMessageShowText("time of last reading: ${JoHH.dateTimeText(persistentTimeLastBg)}")
+                sendMessageShowText("time of current reading: ${JoHH.dateTimeText(timeLastBg)}")
 
                 /*
                  * step 10: send sleep command
@@ -606,7 +762,7 @@ class BluetoothLeService() : Service() {
         } else {
             if (cmdFound == 0) {
                 Log.e(TAG, "***COMMAND NOT FOUND! -> $strRecCmd on currentCmd=$currentCommand")
-                //showText("***COMMAND NOT FOUND! -> $strRecCmd on currentCmd=$currentCommand")
+                sendMessageShowText("***COMMAND NOT FOUND! -> $strRecCmd on currentCmd=$currentCommand")
             }
             currentCommand = ""
             null
@@ -738,9 +894,8 @@ class BluetoothLeService() : Service() {
 
         val sensorStatusString: String
         var ret = false
-        val qSSB = sensorStatusByte.toInt()
 
-        when (qSSB) {
+        when (sensorStatusByte.toInt()) {
             0x01 -> sensorStatusString = "not yet started"
             0x02 -> {
                 sensorStatusString = "starting"
@@ -772,6 +927,52 @@ class BluetoothLeService() : Service() {
         bluetoothGatt.writeCharacteristic(writeCharacteristic)
     }
 
+    private fun sendData() {
+        val strBuilder = StringBuilder(
+            "http://${Pref.getString(
+                "IP",
+                "isa.eshestakov.ru/api/dia/patients/set"
+            )}"
+        )
+        strBuilder.append("?id=${Pref.getString("Mac", "1")}")
+        strBuilder.append("&time=${Pref.getString("Time", "0")}")
+        strBuilder.append("&date=${Pref.getString("Date", "0")}")
+        strBuilder.append("&sugar=${String.format(".1%f", Pref.getString("Glucose", "0"))}")
+
+        val meal = Pref.getString("Meal", "0")
+        val basal = Pref.getString("Basal", "0")
+        val bolus = Pref.getString("Bolus", "0")
+        val divider = Pref.getString("Divider", "180.62")
+        if (meal != "0") strBuilder.append("&food=$meal")
+        if (basal != "0") strBuilder.append("&basal=$basal")
+        if (bolus != "0") strBuilder.append("&bolus=$bolus")
+        if (divider != "0") strBuilder.append("&divider=$divider")
+
+        sendMessageShowText("Sending values to $strBuilder")
+
+        request = Request.Builder()
+            .url(strBuilder.toString())
+            .build()
+
+        okHttpClient.newCall(request).enqueue(object : Callback {
+            override fun onResponse(call: Call, response: Response) {
+                if (!response.isSuccessful) {
+                    throw IOException("Unexpected code $response")
+                } else {
+                    sendMessageShowText("Values has been send")
+                    Pref.setString("Glucose", "0")
+                    Pref.setString("Meal", "0")
+                    Pref.setString("Basal", "0")
+                    Pref.setString("Bolus", "0")
+                }
+            }
+
+            override fun onFailure(call: Call, e: IOException) {
+                sendMessageShowText("Sending failed: ${e.message}")
+            }
+        })
+    }
+
     private fun writeChar(
         localmCharacteristic: BluetoothGattCharacteristic,
         value: ByteArray?
@@ -799,6 +1000,8 @@ class BluetoothLeService() : Service() {
     }
 
     companion object {
+        private const val CHANNEL_ID = "Channel_1"
+        private const val NOTIFICATION_ID = 1
         private const val STATE_DISCONNECTED = 0
         private const val STATE_CONNECTING = 1
         private const val STATE_CONNECTED = 2
@@ -811,6 +1014,19 @@ class BluetoothLeService() : Service() {
             UUID.fromString("436AA6E9-082E-4CE8-A08B-01D81F195B24")
         private val desiredReceiveCharacteristicUUID: UUID =
             UUID.fromString("436A0C82-082E-4CE8-A08B-01D81F195B24")
+
+        const val CONNECT = 1
+        const val DISCONNECT = 2
+        const val SEARCH = 3
+        const val SHOW_TEXT = 4
+        const val CHANGE_UI = 5
+        const val ADD_DEVICE = 6
+        const val SEND_DATA = 7
+
+        const val REQUEST_ENABLE_BT = 11
+
+        const val SCAN_PERIOD: Long = 10000
+
 
         const val WAKEUP_COMMAND = "cb010000"
         const val ACK_ON_WAKEUP_ANSWER = "810a00"
@@ -847,12 +1063,15 @@ class BluetoothLeService() : Service() {
         const val BLUCON_BATTERY_LOW_INDICATION1 = "cb020000"
         const val BLUCON_BATTERY_LOW_INDICATION2 = "cbdb0000"
 
+        const val POSITION_OF_SENSOR_STATUS_BYTE = 17
+
+        private const val INTENT_SHOW_TEXT = "INTENT_SHOW_TEXT"
+
         private val BLUKON_GETSENSORAGE_TIMER = "blukon-getSensorAge-timer"
         private val BLUKON_DECODE_SERIAL_TIMER = "blukon-decodeSerial-timer"
 
         private val GET_DECODE_SERIAL_DELAY = 12 * 3600
         private val GET_SENSOR_AGE_DELAY = 3 * 3600
-        const val POSITION_OF_SENSOR_STATUS_BYTE = 17
     }
 }
 
