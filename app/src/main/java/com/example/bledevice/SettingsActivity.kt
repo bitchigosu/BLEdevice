@@ -48,11 +48,14 @@ class SettingsActivity : AppCompatActivity() {
             Pref.setString("Bolus", bolusEditText.checkForNull())
             Pref.setString("IP", IPADDR_View.checkForNull())
             Pref.setString("Mac", CLIENTID_View.checkForNull())
-            Pref.setString("Time", timeText.text.toString().replace(":", "_"))
-            Pref.setString("Date", dateText.text.toString().replace(".", "_"))
+            Pref.setString("Time", timeText.text.toString())
+            Pref.setString("Date", dateText.text.toString())
+
             Pref.setString("Divider", divider.checkForNull())
             Toast.makeText(this, "Saved!", Toast.LENGTH_SHORT).show()
             finish()
+
+
         }
 
         info_basal.setOnClickListener {
@@ -115,7 +118,7 @@ class SettingsActivity : AppCompatActivity() {
             editText_glucose.text = Pref.getString("Glucose", "0").toEditable()
             basalEditText.text = Pref.getString("Basal", "0").toEditable()
             bolusEditText.text = Pref.getString("Bolus", "0").toEditable()
-            IPADDR_View.text = Pref.getString("IP", "83.149.249.16:8888").toEditable()
+            IPADDR_View.text = Pref.getString("IP", "isa.eshestakov.ru/api/dia/patients/set").toEditable() //83.149.249.16:8888
             CLIENTID_View.text = Pref.getString("Mac", "1").toEditable()
             seekBar_meal.progress = Pref.getString("Meal", "0").toInt()
             mealValue.text = Pref.getString("Meal", "0")

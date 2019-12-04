@@ -1,272 +1,223 @@
 package com.example.bledevice
 
-import android.Manifest
+import android.app.Service
 import android.bluetooth.*
-import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
-import android.support.v7.app.AppCompatActivity
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.text.method.ScrollingMovementMethod
+import android.os.Binder
+import android.os.IBinder
 import android.util.Log
-import android.view.Menu
-import android.view.MenuItem
-import android.view.View
 import com.example.bledevice.utils.*
-import kotlinx.android.synthetic.main.activity_main.*
+import com.rits.cloning.Cloner
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import java.nio.ByteBuffer
+import java.text.DateFormat
+import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
 import kotlin.experimental.and
-import com.rits.cloning.Cloner
-import okhttp3.*
-import java.io.IOException
-import java.text.DateFormat
-import java.text.SimpleDateFormat
+
+private val TAG = BluetoothLeService::class.java.simpleName
 
 
-class MainActivity : AppCompatActivity() {
+// A service that interacts with the BLE device via the Android BLE API.
+class BluetoothLeService() : Service() {
 
-    private val TAG = "MainActivity"
-    private val REQUEST_COARSE_LOCATION = 2
-
-    private lateinit var mGatt: BluetoothGatt
-    private lateinit var mWriteCharacteristic: BluetoothGattCharacteristic
-    private lateinit var mReadCharacteristic: BluetoothGattCharacteristic
-
-    private val mFullData: ByteArray = ByteArray(344)
-
-    private var mGetNowGlucoseDataCommand: Boolean = false
-    private var mGetNowGlucoseDataIndexCommand: Boolean = false
-    private var mCommunicationStarted: Boolean = false
-    private val GET_DECODE_SERIAL_DELAY = 12 * 3600
-    private val GET_SENSOR_AGE_DELAY = 3 * 3600
-    private val BLUKON_GETSENSORAGE_TIMER = "blukon-getSensorAge-timer"
-    private val BLUKON_DECODE_SERIAL_TIMER = "blukon-decodeSerial-timer"
-
-    private var mBlockNumber: Int = 0
-    private var mCurrentBlockNumber: Int = 0
-    private var mCurrentOffset: Int = 0
-    private var mTimeLastCmdReceived: Long = 0
-    private var mPersistentTimeLastBg: Long = 0
-    private var mMinutesDiffToLastReading: Int = 0
-    private var mGetOlderReading: Boolean = false
-    private var mMinutesBack: Int = 0
-    private var mTimeLastBg: Long = 0
-    private var mCurrentTrendIndex: Int = 0
-    private var mNowGlucoseOffset: Int = 0
-
-    private val cloner: Cloner = Cloner()
-
-    private val mBluetoothAdapter: BluetoothAdapter? by lazy(LazyThreadSafetyMode.NONE) {
+    private var bondingState: Int = 0
+    private var bluetoothDeviceAddress: String? = null
+    private var connectionState = STATE_DISCONNECTED
+    private val bluetoothAdapter: BluetoothAdapter? by lazy(LazyThreadSafetyMode.NONE) {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothManager.adapter
     }
     private val BluetoothAdapter.isDisabled: Boolean
         get() = !isEnabled
+    private lateinit var bluetoothGatt: BluetoothGatt
+    private lateinit var bleService: BluetoothGattService
+    private lateinit var writeCharacteristic: BluetoothGattCharacteristic
+    private lateinit var readCharacteristic: BluetoothGattCharacteristic
 
-    private var mScanning = false
-    var mBluetoothGatt: BluetoothGatt? = null
-    private lateinit var mHandler: Handler
-    private lateinit var mLeDeviceAdapter: LeDeviceListAdapter
+    private val cloner: Cloner = Cloner()
 
-    var currentCommand: String = ""
+    private val localBinder = LocalBinder()
 
-    private lateinit var okHttpClient: OkHttpClient
-    private lateinit var request: Request
-
-    companion object {
-        const val SCAN_PERIOD: Long = 10000
-        const val REQUEST_ENABLE_BT = 11
-        const val WAKEUP_COMMAND = "cb010000"
-        const val ACK_ON_WAKEUP_ANSWER = "810a00"
-        const val SLEEP_COMMAND = "010c0e00"
-
-        const val GET_PATCH_INFO_COMMAND = "010d0900"
-
-        const val UNKNOWN1_COMMAND = "010d0b00"
-        const val UNKNOWN2_COMMAND = "010d0a00"
-
-        const val GET_SENSOR_TIME_COMMAND = "010d0e0127"     // read single block #0x27
-        const val GET_NOW_DATA_INDEX_COMMAND = "010d0e0103"  // read single block #0x03
-        const val READ_SINGLE_BLOCK_COMMAND_PREFIX = "010d0e010"
-        const val READ_SINGLE_BLOCK_COMMAND_PREFIX_SHORT = "010d0e01"
-        const val GET_HISTORIC_DATA_COMMAND_ALL_BLOCKS =
-            "010d0f02002b" // read all blocks from 0 to 0x2B
-
-        const val PATCH_INFO_RESPONSE_PREFIX = "8bd9"
-        const val SINGLE_BLOCK_INFO_RESPONSE_PREFIX = "8bde"
-        const val MULTIPLE_BLOCK_RESPONSE_INDEX = "8bdf"
-        const val BLUCON_ACK_RESPONSE = "8b0a00"
-        const val BLUCON_NAK_RESPONSE_PREFIX = "8b1a02"
-
-        const val BLUCON_UNKNOWN1_COMMAND_RESPONSE = "8bdb0101041711"
-        const val BLUCON_UNKNOWN2_COMMAND_RESPONSE = "8bdaaa"
-        const val BLUCON_UNKNOWN2_COMMAND_RESPONSE_BATTERY_LOW = "8bda02"
-
-        const val BLUCON_NAK_RESPONSE_ERROR09 = "8b1a020009"
-        const val BLUCON_NAK_RESPONSE_ERROR14 = "8b1a020014"
-
-        const val PATCH_NOT_FOUND_RESPONSE = "8b1a02000f"
-        const val PATCH_READ_ERROR = "8b1a020011"
-
-        // we guess that this two commands indicate a low battery state
-        const val BLUCON_BATTERY_LOW_INDICATION1 = "cb020000"
-        const val BLUCON_BATTERY_LOW_INDICATION2 = "cbdb0000"
-
-        const val POSITION_OF_SENSOR_STATUS_BYTE = 17
-        const val MmollToMgdl = 18.0182
-        const val MgdlToMmoll = 1 / MmollToMgdl
-
+    inner class LocalBinder : Binder() {
+        val service: BluetoothLeService
+            get() = this@BluetoothLeService
     }
 
+    override fun onBind(intent: Intent?): IBinder? = localBinder
+    override fun onUnbind(intent: Intent?): Boolean {
+        close()
+        return super.onUnbind(intent)
+    }
 
-    private val mLeScanCallback = BluetoothAdapter.LeScanCallback { device, _, _ ->
-        runOnUiThread {
-            mLeDeviceAdapter.addDevice(device)
-            mLeDeviceAdapter.notifyDataSetChanged()
+    private fun close() {
+        bluetoothGatt?.close()
+        connectionState = STATE_DISCONNECTED
+        //changeUI(connected = false)
+    }
+
+    private val gattCallback = object : BluetoothGattCallback() {
+        override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
+            bluetoothGatt = gatt!!
+            val intentAction: String
+            when (newState) {
+                BluetoothProfile.STATE_CONNECTED -> {
+                    intentAction = ACTION_GATT_CONNECTED
+                    connectionState = STATE_CONNECTED
+                    Pref.setString(
+                        "Mac",
+                        bluetoothGatt.device?.address.toString().replace(":", "_")
+                    )
+                    broadcastUpdate(intentAction)
+                    /*                   Handler(Looper.getMainLooper()).postDelayed({
+                                           val ans: Boolean = gatt.discoverServices()
+                                           changeUI(true)
+                                           Log.d(TAG, "Connected to GATT server $ans.")
+                                       }, 1000)
+                                       Log.d(TAG, "Connected to GATT server.")*/
+                }
+                BluetoothProfile.STATE_DISCONNECTED -> {
+                    intentAction = ACTION_GATT_DISCONNECTED
+                    connectionState = STATE_DISCONNECTED
+/*                    changeUI(false)
+                    showText(getString(R.string.disconnected))*/
+                    Log.d(TAG, "Disconnected from GATT server.")
+                    broadcastUpdate(intentAction)
+                }
+            }
         }
-    }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-        setSupportActionBar(findViewById(R.id.my_toolbar))
+        override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
+            bluetoothGatt = gatt!!
+            bondingState = bluetoothGatt.device.bondState
+            if (bondingState != BluetoothDevice.BOND_BONDED) {
+                bluetoothGatt.device.createBond()
+                runBlocking {
+                    delay(1000)
+                }
+                bondingState = bluetoothGatt.device.bondState
+                if (bondingState != BluetoothDevice.BOND_BONDED) {
+                    Log.d(TAG, "onServicesDiscovered: Pairing appeared to fail")
+                }
+            } else {
+                Log.d(TAG, "onServicesDiscovered: Device is already bonded")
+            }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(
-                    arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION),
-                    REQUEST_COARSE_LOCATION
+            bleService = gatt.getService(desiredServiceUUID)
+            writeCharacteristic = bleService.getCharacteristic(desiredTransmitCharacteristicUUID)
+            readCharacteristic = bleService.getCharacteristic(desiredReceiveCharacteristicUUID)
+
+            val charaProp = readCharacteristic.properties
+            if ((charaProp and BluetoothGattCharacteristic.PROPERTY_NOTIFY) > 0) {
+                Log.d(TAG, "onServicesDiscovered: Setting notification on characteristic")
+                val result = bluetoothGatt.setCharacteristicNotification(readCharacteristic, true)
+                if (!result) Log.d(
+                    TAG,
+                    "onServicesDiscovered: Failed seeting notification on blukon"
                 )
+            } else {
+                Log.d(TAG, "onServicesDiscovered: Unusual error")
+            }
+            bluetoothGatt.readCharacteristic(readCharacteristic)
+        }
+
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?,
+            status: Int
+        ) {
+            onCharacteristicChanged(gatt, characteristic)
+        }
+
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?,
+            status: Int
+        ) {
+            when (status) {
+                BluetoothGatt.GATT_SUCCESS -> {
+                    Log.d(TAG, "onCharacteristicWrite: OK")
+                }
+                else -> {
+                    Log.d(TAG, "onCharacteristicWrite: Failed :C")
+                }
             }
         }
-        mHandler = Handler()
-        okHttpClient = OkHttpClient()
 
-        mLeDeviceAdapter = LeDeviceListAdapter(this)
-        listview.adapter = mLeDeviceAdapter
-        listview.visibility = View.GONE
-        listview.setOnItemClickListener { _, _, position, _ ->
-            val device: BluetoothDevice = mLeDeviceAdapter.getDevice(position)
-           /* mBluetoothGatt = device
-                .connectGatt(this, false, mGattCallback)*/
-        }
-
-        searchButton.isEnabled = true
-        searchButton.setOnClickListener {
-            mBluetoothAdapter?.takeIf { it.isDisabled }?.apply {
-                val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-                startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
-            }
-            mBluetoothAdapter?.takeIf { it.isEnabled }?.apply {
-                initializeScan()
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?
+        ) {
+            Log.d(TAG, "onCharacteristicChanged: ${characteristic!!.value}")
+            val data = characteristic.value
+            if (data != null && data.isNotEmpty()) {
+                setSerialDataToTransmitterRawData(data)
             }
         }
 
-        disconnectButton.isEnabled = false
-        disconnectButton.setOnClickListener {
-            //close()
+        private fun broadcastUpdate(action: String) {
+            val intent = Intent(action)
+            sendBroadcast(intent)
         }
-
-        sendButton.isEnabled = true
-
-        sendButton.setOnClickListener {
-            sendData()
-        }
-
-        uuid_textView.movementMethod = ScrollingMovementMethod()
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (requestCode == REQUEST_ENABLE_BT) {
-            initializeScan()
-        }
-    }
+    fun connect(address: String): Boolean {
+        val device = bluetoothAdapter?.getRemoteDevice(address) ?: return false
 
-    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        menuInflater.inflate(R.menu.menu, menu)
+        bluetoothGatt = device.connectGatt(this, false, gattCallback)
+        bluetoothDeviceAddress = address
+        connectionState = STATE_DISCONNECTED
         return true
     }
 
-    override fun onOptionsItemSelected(item: MenuItem?): Boolean = when (item?.itemId) {
-        R.id.settings -> {
-            startActivity(Intent(this, SettingsActivity::class.java))
-            true
+    fun disconnect() {
+        if (bluetoothAdapter == null || bluetoothGatt == null) {
+            return
         }
-        else -> {
-            super.onOptionsItemSelected(item)
+        bluetoothGatt?.disconnect()
+    }
+
+    private fun setSerialDataToTransmitterRawData(buffer: ByteArray) {
+        val reply = decodeBlukonPacket(buffer)
+        if (reply != null) {
+            sendBtMessage(reply)
         }
     }
 
-    private fun initializeScan() {
-        listview.visibility = View.VISIBLE
-        mScanning = true
-        scanDevices(mScanning)
-    }
- 
-
-    @Synchronized
-    private fun sendData() {
-        val strBuilder = StringBuilder(
-            "http://${Pref.getString(
-                "IP",
-                "isa.eshestakov.ru/api/dia/patients/set"
-            )}"
-        )
-        strBuilder.append("?id=${Pref.getString("Mac", "1")}")
-        strBuilder.append("&time=${Pref.getString("Time", "0")}")
-        strBuilder.append("&date=${Pref.getString("Date", "0")}")
-        strBuilder.append("&sugar=${String.format(".1%f", Pref.getString("Glucose", "0"))}")
-
-        val meal = Pref.getString("Meal", "0")
-        val basal = Pref.getString("Basal", "0")
-        val bolus = Pref.getString("Bolus", "0")
-        val divider = Pref.getString("Divider", "180.62")
-        if (meal != "0") strBuilder.append("&food=$meal")
-        if (basal != "0") strBuilder.append("&basal=$basal")
-        if (bolus != "0") strBuilder.append("&bolus=$bolus")
-        if (divider != "0") strBuilder.append("&divider=$divider")
-
-        showText("Sending values to $strBuilder")
-
-
-        request = Request.Builder()
-            .url(strBuilder.toString())
-            .build()
-
-        okHttpClient.newCall(request).enqueue(object : Callback {
-            override fun onResponse(call: Call, response: Response) {
-                if (!response.isSuccessful) {
-                    throw IOException("Unexpected code $response")
-                } else {
-                    showText("Values has been send")
-                    showText(response.body()!!.string())
-                    Pref.setString("Glucose", "0")
-                    Pref.setString("Meal", "0")
-                    Pref.setString("Basal", "0")
-                    Pref.setString("Bolus", "0")
-                }
-            }
-
-            override fun onFailure(call: Call, e: IOException) {
-                showText("Sending failed: ${e.message}")
-            }
-        })
-
-/*        Pref.setString("Glucose", "0")
-        Pref.setString("Meal", "0")
-        Pref.setString("Basal", "0")
-        Pref.setString("Bolus", "0")*/
+    private fun sendBtMessage(reply: ByteArray?): Boolean {
+        return sendBtMessage(JoHH.bArrayAsBuffer(reply))
     }
 
-    @Synchronized
-    fun decodeBlukonPacket(buffer: ByteArray?): ByteArray? {
+    private fun sendBtMessage(message: ByteBuffer?): Boolean {
+        Log.d(TAG, "sendBtMessage: entered")
+        val value = message!!.array()
+        if (writeCharacteristic != readCharacteristic) {
+            return writeChar(writeCharacteristic, value)
+        }
+        return writeChar(readCharacteristic, value)
+    }
+
+    private var timeLastCmdReceived: Long = 0
+    private var persistentTimeLastBg: Long = 0
+    private var minutesDiffToLastReading: Int = 0
+    private var currentCommand: String = ""
+    private var communicationStarted: Boolean = false
+    private var getNowGlucoseDataCommand: Boolean = false
+    private var getNowGlucoseDataIndexCommand: Boolean = false
+    private var getOlderReading: Boolean = false
+    private var minutesBack: Int = 0
+    private var timeLastBg: Long = 0
+    private var currentTrendIndex: Int = 0
+    private var nowGlucoseOffset: Int = 0
+    private var blockNumber: Int = 0
+    private var currentBlockNumber: Int = 0
+    private var currentOffset: Int = 0
+    private val fullData: ByteArray = ByteArray(344)
+
+    private fun decodeBlukonPacket(buffer: ByteArray?): ByteArray? {
         var cmdFound = 0
         var gotLowBat: Boolean? = false
         var getHistoricReadings: Boolean? = false
@@ -276,21 +227,21 @@ class MainActivity : AppCompatActivity() {
             return null
         }
 
-        mTimeLastCmdReceived = JoHH.tsl()
+        timeLastCmdReceived = JoHH.tsl()
 
         // calculate time delta to last valid reading
-        mPersistentTimeLastBg = PersistentStore.getLong("blukon-time-of-last-reading")
-        mMinutesDiffToLastReading =
-            (((JoHH.tsl() - mPersistentTimeLastBg) / 1000 + 30) / 60).toInt()
+        persistentTimeLastBg = PersistentStore.getLong("blukon-time-of-last-reading")
+        minutesDiffToLastReading =
+            (((JoHH.tsl() - persistentTimeLastBg) / 1000 + 30) / 60).toInt()
         Log.i(
             TAG,
-            "m_minutesDiffToLastReading=$mMinutesDiffToLastReading, last reading: " + JoHH.dateTimeText(
-                mPersistentTimeLastBg
+            "m_minutesDiffToLastReading=$minutesDiffToLastReading, last reading: " + JoHH.dateTimeText(
+                persistentTimeLastBg
             )
         )
 
         // Get history if the last reading is older than we can reasonably backfill
-        if (Pref.getBooleanDefaultFalse("retrieve_blukon_history") && mPersistentTimeLastBg > 0 && mMinutesDiffToLastReading > 17) {
+        if (Pref.getBooleanDefaultFalse("retrieve_blukon_history") && persistentTimeLastBg > 0 && minutesDiffToLastReading > 17) {
             getHistoricReadings = true
         }
 
@@ -304,7 +255,7 @@ class MainActivity : AppCompatActivity() {
             Log.i(TAG, "Reset currentCommand")
             currentCommand = ""
             cmdFound = 1
-            mCommunicationStarted = true
+            communicationStarted = true
         }
 
         // BluconACKResponse will come in two different situations
@@ -338,12 +289,12 @@ class MainActivity : AppCompatActivity() {
 
             if (strRecCmd.startsWith(BLUCON_NAK_RESPONSE_ERROR14)) {
                 Log.e(TAG, "Timeout: please wait 5min or push button to restart!")
-                showText("Timeout: please wait 5min or push button to restart!")
+                //showText("Timeout: please wait 5min or push button to restart!")
             }
 
             if (strRecCmd.startsWith(PATCH_NOT_FOUND_RESPONSE)) {
                 Log.e(TAG, "Libre sensor has been removed!")
-                showText("Libre sensor has been removed!")
+                //showText("Libre sensor has been removed!")
             }
 
             if (strRecCmd.startsWith(PATCH_READ_ERROR)) {
@@ -351,21 +302,17 @@ class MainActivity : AppCompatActivity() {
                     TAG,
                     "Patch read error.. please check the connectivity and re-initiate... or maybe battery is low?"
                 )
-                showText("Patch read error.. please check the connectivity and re-initiate... or maybe battery is low?")
+                //showText("Patch read error.. please check the connectivity and re-initiate... or maybe battery is low?")
                 Pref.setInt("bridge_battery", 1)
                 gotLowBat = true
             }
 
-            if (strRecCmd.startsWith(BLUCON_NAK_RESPONSE_ERROR09)) {
-                //Log.e(TAG, "");
-            }
-
-            mGetNowGlucoseDataCommand = false
-            mGetNowGlucoseDataIndexCommand = false
+            getNowGlucoseDataCommand = false
+            getNowGlucoseDataIndexCommand = false
 
             currentCommand = SLEEP_COMMAND
             Log.i(TAG, "Send sleep cmd")
-            mCommunicationStarted = false
+            communicationStarted = false
 
 
             JoHH.clearRatelimit(BLUKON_GETSENSORAGE_TIMER)// set to current time to force timer to be set back
@@ -413,10 +360,10 @@ class MainActivity : AppCompatActivity() {
                 Log.i(TAG, "Send ACK")
             } else {
                 Log.e(TAG, "Sensor is not ready, stop!")
-                showText("Sensor is not ready, stop!")
+                //showText("Sensor is not ready, stop!")
                 currentCommand = SLEEP_COMMAND
                 Log.i(TAG, "Send sleep cmd")
-                mCommunicationStarted = false
+                communicationStarted = false
             }
 
             /*
@@ -464,10 +411,10 @@ class MainActivity : AppCompatActivity() {
                     // Send the command to getHistoricData (read all blcoks from 0 to 0x2b)
                     Log.i(TAG, "getHistoricData (2)")
                     currentCommand = GET_HISTORIC_DATA_COMMAND_ALL_BLOCKS
-                    mBlockNumber = 0
+                    blockNumber = 0
                 } else {
                     currentCommand = GET_NOW_DATA_INDEX_COMMAND
-                    mGetNowGlucoseDataIndexCommand =
+                    getNowGlucoseDataIndexCommand =
                         true//to avoid issue when gotNowDataIndex cmd could be same as getNowGlucoseData (case block=3)
                     Log.i(TAG, "getNowGlucoseDataIndexCommand")
                 }
@@ -485,13 +432,13 @@ class MainActivity : AppCompatActivity() {
 
             val sensorAge = sensorAge(buffer)
             val sensorAgeDays = TimeUnit.SECONDS.toDays(sensorAge.toLong())
-            showText("Sensor Age: $sensorAgeDays")
+            //showText("Sensor Age: $sensorAgeDays")
 
             if (Pref.getBooleanDefaultFalse("external_blukon_algorithm") || getHistoricReadings!!) {
                 // Send the command to getHistoricData (read all blcoks from 0 to 0x2b)
                 Log.i(TAG, "getHistoricData (3)")
                 currentCommand = GET_HISTORIC_DATA_COMMAND_ALL_BLOCKS
-                mBlockNumber = 0
+                blockNumber = 0
             } else {
                 /* LibreAlarmReceiver.CalculateFromDataTransferObject, called when processing historical data,
                  * expects the sensor age not to be updated yet, so only update the sensor age when not retrieving history.
@@ -500,7 +447,7 @@ class MainActivity : AppCompatActivity() {
                     Pref.setInt("nfc_sensor_age", sensorAge)//in min
                 }
                 currentCommand = GET_NOW_DATA_INDEX_COMMAND
-                mGetNowGlucoseDataIndexCommand =
+                getNowGlucoseDataIndexCommand =
                     true//to avoid issue when gotNowDataIndex cmd could be same as getNowGlucoseData (case block=3)
                 Log.i(TAG, "getNowGlucoseDataIndexCommand")
             }
@@ -508,39 +455,39 @@ class MainActivity : AppCompatActivity() {
             /*
          * step 8: determine trend or historic data index
          */
-        } else if (currentCommand.startsWith(GET_NOW_DATA_INDEX_COMMAND) && mGetNowGlucoseDataIndexCommand
+        } else if (currentCommand.startsWith(GET_NOW_DATA_INDEX_COMMAND) && getNowGlucoseDataIndexCommand
             && strRecCmd.startsWith(SINGLE_BLOCK_INFO_RESPONSE_PREFIX)
         ) {
             cmdFound = 1
 
             // check time range for valid backfilling
-            mGetOlderReading =
-                if (mMinutesDiffToLastReading > 7 && mMinutesDiffToLastReading < 8 * 60) {
+            getOlderReading =
+                if (minutesDiffToLastReading > 7 && minutesDiffToLastReading < 8 * 60) {
                     Log.i(TAG, "start backfilling")
                     true
                 } else {
                     false
                 }
             // get index to current BG reading
-            mCurrentBlockNumber = blockNumberForNowGlucoseData(buffer)
-            mCurrentOffset = mNowGlucoseOffset
+            currentBlockNumber = blockNumberForNowGlucoseData(buffer)
+            currentOffset = nowGlucoseOffset
             // time diff must be > 5,5 min and less than the complete trend buffer
-            if (!mGetOlderReading) {
+            if (!getOlderReading) {
                 currentCommand =
-                    READ_SINGLE_BLOCK_COMMAND_PREFIX + Integer.toHexString(mCurrentBlockNumber)//getNowGlucoseData
-                mNowGlucoseOffset = mCurrentOffset
+                    READ_SINGLE_BLOCK_COMMAND_PREFIX + Integer.toHexString(currentBlockNumber)//getNowGlucoseData
+                nowGlucoseOffset = currentOffset
                 Log.i(TAG, "getNowGlucoseData")
             } else {
-                mMinutesBack = mMinutesDiffToLastReading
-                var delayedTrendIndex = mCurrentTrendIndex
+                minutesBack = minutesDiffToLastReading
+                var delayedTrendIndex = currentTrendIndex
                 // ensure to have min 3 mins distance to last reading to avoid doible draws (even if they are distict)
                 when {
-                    mMinutesBack > 17 -> mMinutesBack = 15
-                    mMinutesBack > 12 -> mMinutesBack = 10
-                    mMinutesBack > 7 -> mMinutesBack = 5
+                    minutesBack > 17 -> minutesBack = 15
+                    minutesBack > 12 -> minutesBack = 10
+                    minutesBack > 7 -> minutesBack = 5
                 }
-                Log.i(TAG, "read $mMinutesBack mins old trend data")
-                for (i in 0 until mMinutesBack) {
+                Log.i(TAG, "read $minutesBack mins old trend data")
+                for (i in 0 until minutesBack) {
                     if (--delayedTrendIndex < 0)
                         delayedTrendIndex = 15
                 }
@@ -550,13 +497,13 @@ class MainActivity : AppCompatActivity() {
 
                 Log.i(TAG, "getNowGlucoseData backfilling")
             }
-            mGetNowGlucoseDataIndexCommand = false
-            mGetNowGlucoseDataCommand = true
+            getNowGlucoseDataIndexCommand = false
+            getNowGlucoseDataCommand = true
 
             /*
          * step 9: calculate fro current index the block number next to read
          */
-        } else if (currentCommand.startsWith(READ_SINGLE_BLOCK_COMMAND_PREFIX_SHORT) && mGetNowGlucoseDataCommand
+        } else if (currentCommand.startsWith(READ_SINGLE_BLOCK_COMMAND_PREFIX_SHORT) && getNowGlucoseDataCommand
             && strRecCmd.startsWith(SINGLE_BLOCK_INFO_RESPONSE_PREFIX)
         ) {
 
@@ -579,47 +526,47 @@ class MainActivity : AppCompatActivity() {
             Pref.setString("Glucose", currentGlucose.toString())
             Pref.setString(
                 "Time",
-                simpleDateFormat.format(mTimeLastCmdReceived).toString()//.replace(":", "_")
+                simpleDateFormat.format(timeLastCmdReceived).toString()//.replace(":", "_")
             )
             Pref.setString(
                 "Date",
-                DateFormat.getDateInstance(3).format(mTimeLastCmdReceived).toString()//.replace(".", "_")
+                DateFormat.getDateInstance(3).format(timeLastCmdReceived).toString()//.replace(".", "_")
             )
             sendData()
 
             Log.i(TAG, "********got getNowGlucoseData=$currentGlucose")
-            showText("Current glucose: $currentGlucose")
+            //showText("Current glucose: $currentGlucose")
 
-            if (!mGetOlderReading) {
+            if (!getOlderReading) {
 
-                mTimeLastBg = now
+                timeLastBg = now
 
-                PersistentStore.setLong("blukon-time-of-last-reading", mTimeLastBg)
-                Log.i(TAG, "time of current reading: " + JoHH.dateTimeText(mTimeLastBg))
-                showText("time of last reading: ${JoHH.dateTimeText(mPersistentTimeLastBg)}")
-                showText("time of current reading: " + JoHH.dateTimeText(mTimeLastBg))
+                PersistentStore.setLong("blukon-time-of-last-reading", timeLastBg)
+                Log.i(TAG, "time of current reading: " + JoHH.dateTimeText(timeLastBg))
+//                showText("time of last reading: ${JoHH.dateTimeText(persistentTimeLastBg)}")
+//                showText("time of current reading: " + JoHH.dateTimeText(timeLastBg))
 
                 /*
                  * step 10: send sleep command
                  */
                 currentCommand = SLEEP_COMMAND
                 Log.i(TAG, "Send sleep cmd")
-                mCommunicationStarted = false
+                communicationStarted = false
 
-                mGetNowGlucoseDataCommand = false
+                getNowGlucoseDataCommand = false
             } else {
                 Log.i(
                     TAG,
-                    "bf: processNewTransmitterData with delayed timestamp of $mMinutesBack min"
+                    "bf: processNewTransmitterData with delayed timestamp of $minutesBack min"
                 )
 
-                mMinutesBack -= 5
-                if (mMinutesBack < 5) {
-                    mGetOlderReading = false
+                minutesBack -= 5
+                if (minutesBack < 5) {
+                    getOlderReading = false
                 }
-                Log.i(TAG, "bf: calculate next trend buffer with $mMinutesBack min timestamp")
-                var delayedTrendIndex = mCurrentTrendIndex
-                for (i in 0 until mMinutesBack) {
+                Log.i(TAG, "bf: calculate next trend buffer with $minutesBack min timestamp")
+                var delayedTrendIndex = currentTrendIndex
+                for (i in 0 until minutesBack) {
                     if (--delayedTrendIndex < 0)
                         delayedTrendIndex = 15
                 }
@@ -631,7 +578,7 @@ class MainActivity : AppCompatActivity() {
 
             }
         } else if ((currentCommand.startsWith(GET_HISTORIC_DATA_COMMAND_ALL_BLOCKS) /*getHistoricData */
-                    || currentCommand.isEmpty() && mBlockNumber > 0)
+                    || currentCommand.isEmpty() && blockNumber > 0)
             && strRecCmd.startsWith(MULTIPLE_BLOCK_RESPONSE_INDEX)
         ) {
             cmdFound = 1
@@ -659,7 +606,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             if (cmdFound == 0) {
                 Log.e(TAG, "***COMMAND NOT FOUND! -> $strRecCmd on currentCmd=$currentCommand")
-                showText("***COMMAND NOT FOUND! -> $strRecCmd on currentCmd=$currentCommand")
+                //showText("***COMMAND NOT FOUND! -> $strRecCmd on currentCmd=$currentCommand")
             }
             currentCommand = ""
             null
@@ -668,42 +615,42 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handlegetHistoricDataResponse(buffer: ByteArray) {
-        Log.e(TAG, "recieved historic data, m_block_number = $mBlockNumber")
+        Log.e(TAG, "recieved historic data, m_block_number = $blockNumber")
         // We are looking for 43 blocks of 8 bytes.
         // The bluekon will send them as 21 blocks of 16 bytes, and the last one of 8 bytes.
         // The packet will look like "0x8b 0xdf 0xblocknumber 0x02 DATA" (so data starts at place 4)
-        if (mBlockNumber > 42) {
-            Log.e(TAG, "recieved historic data, but block number is too big $mBlockNumber")
+        if (blockNumber > 42) {
+            Log.e(TAG, "recieved historic data, but block number is too big $blockNumber")
             return
         }
 
         val len = buffer.size - 4
         Log.e(TAG, "len = " + len + " " + len + " blocknum " + buffer[2])
 
-        if (buffer[2].toInt() != mBlockNumber) {
+        if (buffer[2].toInt() != blockNumber) {
             Log.e(
                 TAG,
-                "We have recieved a bad block number buffer[2] = " + buffer[2] + " m_blockNumber = " + mBlockNumber
+                "We have recieved a bad block number buffer[2] = " + buffer[2] + " m_blockNumber = " + blockNumber
             )
             return
         }
-        if (8 * mBlockNumber + len > mFullData.size) {
+        if (8 * blockNumber + len > fullData.size) {
             Log.e(
                 TAG,
-                "We have recieved too much data  m_blockNumber = " + mBlockNumber + " len = " + len +
-                        " m_full_data.length = " + mFullData.size
+                "We have recieved too much data  m_blockNumber = " + blockNumber + " len = " + len +
+                        " m_full_data.length = " + fullData.size
             )
             return
         }
 
-        System.arraycopy(buffer, 4, mFullData, 8 * mBlockNumber, len)
-        mBlockNumber += len / 8
+        System.arraycopy(buffer, 4, fullData, 8 * blockNumber, len)
+        blockNumber += len / 8
 
-        if (mBlockNumber >= 43) {
+        if (blockNumber >= 43) {
             val now = JoHH.tsl()
             currentCommand = SLEEP_COMMAND
             Log.i(TAG, "Send sleep cmd")
-            mCommunicationStarted = false
+            communicationStarted = false
 
             PersistentStore.setLong("blukon-time-of-last-reading", now)
             Log.i(TAG, "time of current reading: " + JoHH.dateTimeText(now))
@@ -714,12 +661,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun nowGetGlucoseValue(input: ByteArray): Int {
         val rawGlucose: Long =
-            (input[3 + mNowGlucoseOffset + 1].toLong() and 0x1F).shl(8) or (input[3 + mNowGlucoseOffset].toLong() and 0xFF)
+            (input[3 + nowGlucoseOffset + 1].toLong() and 0x1F).shl(8) or (input[3 + nowGlucoseOffset].toLong() and 0xFF)
 
         // option to use 13 bit mask
         //final boolean thirteen_bit_mask = Pref.getBooleanDefaultFalse("testing_use_thirteen_bit_mask");
         // grep 2 bytes with BG data from input bytearray, mask out 12 LSB bits and rescale for xDrip+
-        Log.i(TAG, "rawGlucose=$rawGlucose, m_nowGlucoseOffset=$mNowGlucoseOffset")
+        Log.i(TAG, "rawGlucose=$rawGlucose, m_nowGlucoseOffset=$nowGlucoseOffset")
 
         // rescale
         //curGluc = getGlucose(rawGlucose)
@@ -731,7 +678,7 @@ class MainActivity : AppCompatActivity() {
         var nowGlucoseIndex2: Int = (input[5] and 0x0F).toInt()
         val nowGlucoseIndex3: Int
 
-        mCurrentTrendIndex = nowGlucoseIndex2
+        currentTrendIndex = nowGlucoseIndex2
 
         // calculate byte position in sensor body
         nowGlucoseIndex2 = nowGlucoseIndex2 * 6 + 4
@@ -746,11 +693,11 @@ class MainActivity : AppCompatActivity() {
         nowGlucoseIndex3 = 3 + nowGlucoseIndex2 / 8
 
         // calculate offset of the 2 bytes in the block
-        mNowGlucoseOffset = nowGlucoseIndex2 % 8
+        nowGlucoseOffset = nowGlucoseIndex2 % 8
 
         Log.i(
             TAG,
-            "++++++++currentTrendData: index $mCurrentTrendIndex, block $nowGlucoseIndex3, offset $mNowGlucoseOffset"
+            "++++++++currentTrendData: index $currentTrendIndex, block $nowGlucoseIndex3, offset $nowGlucoseOffset"
         )
 
         return nowGlucoseIndex3
@@ -770,10 +717,10 @@ class MainActivity : AppCompatActivity() {
         ngi3 = 3 + ngi2 / 8
 
         // calculate the offset in the block
-        mNowGlucoseOffset = ngi2 % 8
+        nowGlucoseOffset = ngi2 % 8
         Log.i(
             TAG,
-            "++++++++backfillingTrendData: index $delayedIndex, block $ngi3, offset $mNowGlucoseOffset"
+            "++++++++backfillingTrendData: index $delayedIndex, block $ngi3, offset $nowGlucoseOffset"
         )
 
         return ngi3
@@ -785,18 +732,6 @@ class MainActivity : AppCompatActivity() {
         Log.i(TAG, "sensorAge=$sensorAge")
 
         return sensorAge
-    }
-
-    private fun getGlucose(rawGlucose: Long): Int {
-        // standard divider for raw Libre data (1000 range)
-        return (rawGlucose * 117.64705).toInt()
-    }
-
-    private fun sendCommand() {
-        val value = "8bde".toByteArray(Charsets.UTF_8)
-        Log.d(TAG, "sendCommand: $value")
-        mWriteCharacteristic.value = value
-        mGatt.writeCharacteristic(mWriteCharacteristic)
     }
 
     private fun isSensorReady(sensorStatusByte: Byte): Boolean {
@@ -830,64 +765,94 @@ class MainActivity : AppCompatActivity() {
         return ret
     }
 
-    private fun changeUI(connected: Boolean) {
-        Handler(Looper.getMainLooper()).post {
-            disconnectButton.isEnabled = connected
-            sendButton.isEnabled = !connected
-            when (connected) {
-                true -> {
-                    showText(getString(R.string.connected))
-                    listview.visibility = View.GONE
+    private fun sendCommand() {
+        val value = "8bde".toByteArray(Charsets.UTF_8)
+        Log.d(TAG, "sendCommand: $value")
+        writeCharacteristic.value = value
+        bluetoothGatt.writeCharacteristic(writeCharacteristic)
+    }
+
+    private fun writeChar(
+        localmCharacteristic: BluetoothGattCharacteristic,
+        value: ByteArray?
+    ): Boolean {
+        localmCharacteristic.value = value
+        val result = bluetoothGatt.writeCharacteristic(localmCharacteristic)
+        if (!result) {
+            Log.d(TAG, "writeChar: Error writing characteristic")
+            val resendCharacteristic: BluetoothGattCharacteristic =
+                cloner.shallowClone(localmCharacteristic)
+            runBlocking {
+                delay(1000)
+            }
+            JoHH.runOnUiThreadDelayed({
+                kotlin.run {
+                    val newResult = bluetoothGatt.writeCharacteristic(resendCharacteristic)
+                    if (!newResult) Log.d(TAG, "writeChar: Error writing char on 2nd try")
+                    else Log.d(TAG, "writeChar: Succeeded writing char on 2nd try")
                 }
-                false -> {
-                    showText(getString(R.string.disconnected))
-                    listview.visibility = View.VISIBLE
-                }
-            }
-
+            }, 500)
+        } else {
+            Log.d(TAG, "writeChar: SUCCESSFUL")
         }
+        return result
     }
 
-    private fun showText(text: String) {
-        runOnUiThread {
-            uuid_textView.text = "" + uuid_textView.text + "\n" + text
-        }
+    companion object {
+        private const val STATE_DISCONNECTED = 0
+        private const val STATE_CONNECTING = 1
+        private const val STATE_CONNECTED = 2
 
-    }
+        const val ACTION_GATT_CONNECTED = "com.example.bluetooth.le.ACTION_GATT_CONNECTED"
+        const val ACTION_GATT_DISCONNECTED = "com.example.bluetooth.le.ACTION_GATT_DISCONNECTED"
+        private val desiredServiceUUID: UUID =
+            UUID.fromString("436A62C0-082E-4CE8-A08B-01D81F195B24")
+        private val desiredTransmitCharacteristicUUID: UUID =
+            UUID.fromString("436AA6E9-082E-4CE8-A08B-01D81F195B24")
+        private val desiredReceiveCharacteristicUUID: UUID =
+            UUID.fromString("436A0C82-082E-4CE8-A08B-01D81F195B24")
 
-    private val scanCallback = object : ScanCallback() {
-        override fun onScanResult(callbackType: Int, result: ScanResult?) {
-            runOnUiThread {
-                mLeDeviceAdapter.addDevice(result!!.device)
-                mLeDeviceAdapter.notifyDataSetChanged()
-            }
-        }
+        const val WAKEUP_COMMAND = "cb010000"
+        const val ACK_ON_WAKEUP_ANSWER = "810a00"
+        const val SLEEP_COMMAND = "010c0e00"
 
-        override fun onScanFailed(errorCode: Int) {
-            println("Scan failed")
-        }
+        const val GET_PATCH_INFO_COMMAND = "010d0900"
 
-        override fun onBatchScanResults(results: MutableList<ScanResult>?) {
-            super.onBatchScanResults(results)
-        }
-    }
+        const val UNKNOWN1_COMMAND = "010d0b00"
+        const val UNKNOWN2_COMMAND = "010d0a00"
 
-    private fun scanDevices(enable: Boolean) {
-        searchButton.isEnabled = !mScanning
-        when (enable) {
-            true -> {
-                mHandler.postDelayed({
-                    mScanning = false
-                    mBluetoothAdapter?.bluetoothLeScanner?.stopScan(scanCallback)
-                    searchButton.isEnabled = true
-                }, SCAN_PERIOD)
-                mScanning = true
-                mBluetoothAdapter?.bluetoothLeScanner?.startScan(scanCallback)
-            }
-            else -> {
-                mScanning = false
-                mBluetoothAdapter?.bluetoothLeScanner?.stopScan(scanCallback)
-            }
-        }
+        const val GET_SENSOR_TIME_COMMAND = "010d0e0127"     // read single block #0x27
+        const val GET_NOW_DATA_INDEX_COMMAND = "010d0e0103"  // read single block #0x03
+        const val READ_SINGLE_BLOCK_COMMAND_PREFIX = "010d0e010"
+        const val READ_SINGLE_BLOCK_COMMAND_PREFIX_SHORT = "010d0e01"
+        const val GET_HISTORIC_DATA_COMMAND_ALL_BLOCKS =
+            "010d0f02002b" // read all blocks from 0 to 0x2B
+
+        const val PATCH_INFO_RESPONSE_PREFIX = "8bd9"
+        const val SINGLE_BLOCK_INFO_RESPONSE_PREFIX = "8bde"
+        const val MULTIPLE_BLOCK_RESPONSE_INDEX = "8bdf"
+        const val BLUCON_ACK_RESPONSE = "8b0a00"
+        const val BLUCON_NAK_RESPONSE_PREFIX = "8b1a02"
+
+        const val BLUCON_UNKNOWN1_COMMAND_RESPONSE = "8bdb0101041711"
+        const val BLUCON_UNKNOWN2_COMMAND_RESPONSE = "8bdaaa"
+        const val BLUCON_UNKNOWN2_COMMAND_RESPONSE_BATTERY_LOW = "8bda02"
+
+        const val BLUCON_NAK_RESPONSE_ERROR14 = "8b1a020014"
+
+        const val PATCH_NOT_FOUND_RESPONSE = "8b1a02000f"
+        const val PATCH_READ_ERROR = "8b1a020011"
+
+        // we guess that this two commands indicate a low battery state
+        const val BLUCON_BATTERY_LOW_INDICATION1 = "cb020000"
+        const val BLUCON_BATTERY_LOW_INDICATION2 = "cbdb0000"
+
+        private val BLUKON_GETSENSORAGE_TIMER = "blukon-getSensorAge-timer"
+        private val BLUKON_DECODE_SERIAL_TIMER = "blukon-decodeSerial-timer"
+
+        private val GET_DECODE_SERIAL_DELAY = 12 * 3600
+        private val GET_SENSOR_AGE_DELAY = 3 * 3600
+        const val POSITION_OF_SENSOR_STATUS_BYTE = 17
     }
 }
+
