@@ -322,7 +322,6 @@ class BluetoothLeService : Service() {
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
-            sendMessageUpdateUI(false)
             sendMessageAddDevice(result?.device!!)
         }
 

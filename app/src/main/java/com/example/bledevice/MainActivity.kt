@@ -98,7 +98,7 @@ class MainActivity : AppCompatActivity() {
 
         mLeDeviceAdapter = LeDeviceListAdapter(this)
         listview.adapter = mLeDeviceAdapter
-        listview.visibility = View.GONE
+        //listview.visibility = View.GONE
         listview.setOnItemClickListener { _, _, position, _ ->
             val device: BluetoothDevice = mLeDeviceAdapter.getDevice(position)
             if (!bound) {
@@ -227,7 +227,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        unbindService(serviceConnection)
+        serviceConnection?.let {
+            unbindService(serviceConnection)
+        }
     }
 
     private fun showText(text: String) {
