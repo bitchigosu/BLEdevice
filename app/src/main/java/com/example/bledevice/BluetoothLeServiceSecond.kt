@@ -74,8 +74,8 @@ class BluetoothLeServiceSecond : Service() {
 
     var currentCommand: String = ""
 
-    private lateinit var mClient: OkHttpClient
-    private lateinit var mRequest: Request
+    private lateinit var okHttpClient: OkHttpClient
+    private lateinit var request: Request
 
     companion object {
         const val SCAN_PERIOD: Long = 10000
@@ -244,7 +244,7 @@ class BluetoothLeServiceSecond : Service() {
         mBluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager?
         mBluetoothAdapter = mBluetoothManager?.adapter
         mHandler = Handler()
-        mClient = OkHttpClient()
+        okHttpClient = OkHttpClient()
 
         createNotificationChannel();
         startForeground(BluetoothLeService.NOTIFICATION_ID, createNotification().build())
@@ -296,35 +296,42 @@ class BluetoothLeServiceSecond : Service() {
 
     @Synchronized
     private fun sendData() {
-        val strBuilder = StringBuilder("http://${Pref.getString("IP", "83.149.249.16:8888")}")
+        val strBuilder = StringBuilder(
+            "http://${Pref.getString(
+                "IP",
+                "isa.eshestakov.ru/api/dia/patients/set"
+            )}"
+        )
         strBuilder.append("?id=${Pref.getString("Mac", "1")}")
         strBuilder.append("&time=${Pref.getString("Time", "0")}")
         strBuilder.append("&date=${Pref.getString("Date", "0")}")
-        strBuilder.append("&glucose=${Pref.getString("Glucose", "0")}")
+        strBuilder.append("&sugar=${Pref.getString("Glucose", "0")}")
 
         val meal = Pref.getString("Meal", "0")
         val basal = Pref.getString("Basal", "0")
         val bolus = Pref.getString("Bolus", "0")
-        val divider = Pref.getString("Divider", "1")
-        if (meal != "0") strBuilder.append("&meal=$meal")
+        val divider = Pref.getString("Divider", "180.62")
+        if (meal != "0") strBuilder.append("&food=$meal")
         if (basal != "0") strBuilder.append("&basal=$basal")
         if (bolus != "0") strBuilder.append("&bolus=$bolus")
         if (divider != "0") strBuilder.append("&divider=$divider")
 
         sendMessageShowText("Sending values to $strBuilder")
 
-
-        mRequest = Request.Builder()
+        request = Request.Builder()
             .url(strBuilder.toString())
             .build()
 
-        mClient.newCall(mRequest).enqueue(object : Callback {
+        okHttpClient.newCall(request).enqueue(object : Callback {
             override fun onResponse(call: Call, response: Response) {
                 if (!response.isSuccessful) {
                     throw IOException("Unexpected code $response")
                 } else {
                     sendMessageShowText("Values has been send")
-                    sendMessageShowText(response.body()!!.string())
+                    Pref.setString("Glucose", "0")
+                    Pref.setString("Meal", "0")
+                    Pref.setString("Basal", "0")
+                    Pref.setString("Bolus", "0")
                 }
             }
 
