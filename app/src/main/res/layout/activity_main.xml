@@ -1,76 +1,176 @@
 <?xml version="1.0" encoding="utf-8"?>
-<android.support.constraint.ConstraintLayout
-        xmlns:android="http://schemas.android.com/apk/res/android"
-        xmlns:tools="http://schemas.android.com/tools"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:app="http://schemas.android.com/apk/res-auto"
+        xmlns:tools="http://schemas.android.com/tools"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:nestedScrollingEnabled="true"
         android:background="#EDEEF0"
-        tools:context=".MainActivity">
+        android:layout_height="match_parent">
 
-    <android.support.v7.widget.Toolbar
-            android:id="@+id/my_toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            android:background="?attr/colorPrimary"
-            app:layout_constraintTop_toTopOf="parent"
-            app:titleTextColor="@color/white"
-            app:subtitleTextColor="@color/white"
-            app:popupTheme="@style/ThemeOverlay.AppCompat.Light"/>
-
-    <Button
-            android:id="@+id/searchButton"
+    <android.support.constraint.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:layout_constraintTop_toBottomOf="@id/my_toolbar"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            android:text="@string/search_for_devices"
-            style="@style/searchBtn"/>
+            android:nestedScrollingEnabled="true"
+            android:paddingBottom="8dp"
+            tools:context=".MainActivity">
 
-    <ListView
-            android:id="@+id/listview"
-            android:layout_width="match_parent"
-            android:layout_height="200dp"
-            android:background="@color/white"
-            android:elevation="4dp"
-            app:layout_constraintTop_toBottomOf="@id/searchButton"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            style="@style/marginValues"/>
-    <TextView
-            android:id="@+id/uuid_textView"
-            android:textStyle="bold"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:scrollbars="vertical"
-            android:background="@color/white"
-            app:layout_constraintStart_toStartOf="@id/listview"
-            app:layout_constraintEnd_toEndOf="@id/listview"
-            app:layout_constraintTop_toBottomOf="@id/sendButton"
-            app:layout_constraintBottom_toBottomOf="parent"
-            style="@style/marginValues"
-    />
+        <android.support.v7.widget.Toolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="?attr/actionBarSize"
+                android:background="?attr/colorPrimary"
+                app:layout_constraintTop_toTopOf="parent"
+                app:popupTheme="@style/ThemeOverlay.AppCompat.Light"
+                app:subtitleTextColor="@color/white"
+                app:titleTextColor="@color/white" />
 
-    <Button
-            android:id="@+id/disconnectButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:layout_constraintTop_toBottomOf="@id/listview"
-            app:layout_constraintStart_toStartOf="@id/searchButton"
-            app:layout_constraintEnd_toEndOf="@id/searchButton"
-            android:text="@string/disconnect"
-            android:enabled="false"
-            style="@style/searchBtn"/>
-    <Button
-            android:id="@+id/sendButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:layout_constraintTop_toBottomOf="@id/disconnectButton"
-            app:layout_constraintStart_toStartOf="@id/searchButton"
-            app:layout_constraintEnd_toEndOf="@id/searchButton"
-            android:text="@string/send"
-            style="@style/searchBtn"/>
+        <TextView
+                android:id="@+id/meal_label"
+                style="@style/labels_textView"
+                android:layout_marginStart="36dp"
+                android:text="@string/meal"
+                app:layout_constraintBottom_toBottomOf="@id/seekbar_meal"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="@id/seekbar_meal" />
 
-</android.support.constraint.ConstraintLayout>
+        <TextView
+                android:id="@+id/meal_value"
+                style="@style/labels_textView"
+                app:layout_constraintBottom_toBottomOf="@id/seekbar_meal"
+                app:layout_constraintStart_toEndOf="@id/seekbar_meal"
+                app:layout_constraintTop_toTopOf="@id/seekbar_meal"
+                tools:text="@string/meal" />
+
+        <SeekBar
+                android:id="@+id/seekbar_meal"
+                style="@style/Widget.AppCompat.SeekBar.Discrete"
+                android:layout_width="148dp"
+                android:layout_height="28dp"
+                android:layout_marginTop="20dp"
+                android:max="10"
+                android:progress="0"
+                android:progressBackgroundTint="@color/blue"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/toolbar" />
+
+        <TextView
+                android:id="@+id/basal_label"
+                style="@style/labels_textView"
+                android:text="@string/basal_ins"
+                app:layout_constraintBottom_toBottomOf="@id/seekbar_basal"
+                app:layout_constraintStart_toStartOf="@id/meal_label"
+                app:layout_constraintTop_toTopOf="@id/seekbar_basal" />
+
+        <TextView
+                android:id="@+id/basal_value"
+                style="@style/labels_textView"
+                app:layout_constraintBottom_toBottomOf="@id/seekbar_basal"
+                app:layout_constraintStart_toEndOf="@id/seekbar_basal"
+                app:layout_constraintTop_toTopOf="@id/seekbar_basal"
+                tools:text="@string/basal_ins" />
+
+        <SeekBar
+                android:id="@+id/seekbar_basal"
+                style="@style/Widget.AppCompat.SeekBar.Discrete"
+                android:layout_width="148dp"
+                android:layout_height="28dp"
+                android:layout_marginTop="20dp"
+                android:max="10"
+                android:progress="0"
+                android:progressBackgroundTint="@color/blue"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/seekbar_meal" />
+
+        <TextView
+                android:id="@+id/bolus_label"
+                style="@style/labels_textView"
+                android:text="@string/bolus_ins"
+                app:layout_constraintBottom_toBottomOf="@id/seekbar_bolus"
+                app:layout_constraintStart_toStartOf="@id/meal_label"
+                app:layout_constraintTop_toTopOf="@id/seekbar_bolus" />
+
+        <TextView
+                android:id="@+id/bolus_value"
+                style="@style/labels_textView"
+                app:layout_constraintBottom_toBottomOf="@id/seekbar_bolus"
+                app:layout_constraintStart_toEndOf="@id/seekbar_bolus"
+                app:layout_constraintTop_toTopOf="@id/seekbar_bolus"
+                tools:text="@string/bolus_ins" />
+
+        <SeekBar
+                android:id="@+id/seekbar_bolus"
+                style="@style/Widget.AppCompat.SeekBar.Discrete"
+                android:layout_width="148dp"
+                android:layout_height="28dp"
+                android:layout_marginTop="20dp"
+                android:max="10"
+                android:progress="0"
+                android:progressBackgroundTint="@color/blue"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/seekbar_basal" />
+
+        <Button
+                android:id="@+id/send"
+                style="@style/Default_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/send"
+                app:layout_constraintEnd_toEndOf="@id/seekbar_bolus"
+                app:layout_constraintStart_toStartOf="@id/seekbar_bolus"
+                app:layout_constraintTop_toBottomOf="@id/seekbar_bolus" />
+
+        <Button
+                android:id="@+id/search"
+                style="@style/Default_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/search_devices"
+                app:layout_constraintEnd_toStartOf="@id/disconnect"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/send" />
+
+        <ListView
+                android:id="@+id/devices"
+                style="@style/marginValues"
+                android:layout_width="match_parent"
+                android:layout_height="200dp"
+                android:background="@color/white"
+                android:elevation="4dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/search" />
+
+        <Button
+                android:id="@+id/disconnect"
+                style="@style/Default_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:enabled="false"
+                android:text="@string/disconnect"
+                app:layout_constraintBottom_toBottomOf="@id/search"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toEndOf="@id/search"
+                app:layout_constraintTop_toTopOf="@id/search" />
+
+        <Button
+                android:id="@+id/show_hide_console"
+                style="@style/Default_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:enabled="true"
+                android:text="@string/show_hide_console"
+                app:layout_constraintTop_toBottomOf="@id/devices" />
+
+        <TextView
+                android:id="@+id/console"
+                style="@style/marginValues"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/white"
+                android:visibility="gone"
+                android:textStyle="bold"
+                app:layout_constraintTop_toBottomOf="@id/show_hide_console" />
+    </android.support.constraint.ConstraintLayout>
+</ScrollView>

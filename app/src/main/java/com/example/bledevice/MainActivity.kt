@@ -2,8 +2,6 @@ package com.example.bledevice
 
 import android.Manifest
 import android.bluetooth.*
-import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanResult
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -12,21 +10,17 @@ import android.content.pm.PackageManager
 import android.os.*
 import android.support.v7.app.AppCompatActivity
 import android.text.method.ScrollingMovementMethod
-import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import com.example.bledevice.utils.*
+import android.widget.SeekBar
+import android.widget.TextView
 import kotlinx.android.synthetic.main.activity_main.*
-import java.nio.ByteBuffer
-import java.util.*
-import java.util.concurrent.TimeUnit
-import kotlin.experimental.and
-import com.rits.cloning.Cloner
-import okhttp3.*
-import java.io.IOException
-import java.text.DateFormat
-import java.text.SimpleDateFormat
+import kotlinx.android.synthetic.main.activity_main.meal_value
+import kotlinx.android.synthetic.main.activity_main.seekbar_meal
+import kotlinx.android.synthetic.main.activity_settings.*
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 
 class MainActivity : AppCompatActivity() {
@@ -72,20 +66,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun addDevice(device: BluetoothDevice) {
-        mLeDeviceAdapter.addDevice(device)
-        mLeDeviceAdapter.notifyDataSetChanged()
-    }
-
-    private fun enableBT() {
-        val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-        startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        setSupportActionBar(findViewById(R.id.my_toolbar))
+        setSupportActionBar(findViewById(R.id.toolbar))
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -95,44 +79,18 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         }
+        setupUI()
+    }
 
-        mLeDeviceAdapter = LeDeviceListAdapter(this)
-        listview.adapter = mLeDeviceAdapter
-        listview.setOnItemClickListener { _, _, position, _ ->
-            val device: BluetoothDevice = mLeDeviceAdapter.getDevice(position)
-            if (!bound) {
-                val intent = Intent(this, BluetoothLeServiceSecond::class.java)
-                bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
-            }
-            connect(device)
-        }
+    override fun onPause() {
+        super.onPause()
+        saveValues()
+    }
 
-        searchButton.isEnabled = true
-        searchButton.setOnClickListener {
-            val intent = Intent(this, BluetoothLeServiceSecond::class.java)
-            bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
-            if (bound) {
-                search()
-            }
-        }
-
-        disconnectButton.isEnabled = false
-        disconnectButton.setOnClickListener {
-            disconnect()
-            bound = false
-            bleService = null
+    override fun onDestroy() {
+        super.onDestroy()
+        if (bound)
             unbindService(serviceConnection)
-        }
-
-        sendButton.isEnabled = true
-
-        sendButton.setOnClickListener {
-            if (bound) {
-                sendData()
-            }
-        }
-
-        uuid_textView.movementMethod = ScrollingMovementMethod()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -159,17 +117,92 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupUI() {
+        mLeDeviceAdapter = LeDeviceListAdapter(this)
+        devices.adapter = mLeDeviceAdapter
+        devices.setOnItemClickListener { _, _, position, _ ->
+            val device: BluetoothDevice = mLeDeviceAdapter.getDevice(position)
+            if (!bound) {
+                val intent = Intent(this, BluetoothLeServiceSecond::class.java)
+                bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+            }
+            connect(device)
+        }
+
+        search.isEnabled = true
+        search.setOnClickListener {
+            val intent = Intent(this, BluetoothLeServiceSecond::class.java)
+            bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+            if (bound) {
+                search()
+            }
+        }
+
+        disconnect.isEnabled = false
+        disconnect.setOnClickListener {
+            disconnect()
+            bound = false
+            bleService = null
+            unbindService(serviceConnection)
+        }
+
+        send.isEnabled = true
+
+        send.setOnClickListener {
+            if (bound) {
+                sendData()
+            }
+        }
+        show_hide_console.setOnClickListener {
+            console.visibility = if (console.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
+        //console.movementMethod = ScrollingMovementMethod()
+
+        GlobalScope.launch {
+            seekbar_meal.progress = Pref.getString("Meal", "0").toInt()
+            meal_value.text = Pref.getString("Meal", "0")
+
+            seekbar_basal.progress = Pref.getString("Basal", "0").toInt()
+            meal_value.text = Pref.getString("Meal", "0")
+
+            seekbar_bolus.progress = Pref.getString("Bolus", "0").toInt()
+            meal_value.text = Pref.getString("Meal", "0")
+        }
+
+        seekbar_meal.setListener(meal_value)
+        seekbar_basal.setListener(basal_value)
+        seekbar_bolus.setListener(bolus_value)
+    }
+
+    private fun saveValues() {
+        Pref.setString("Meal", seekbar_meal.progress.toString())
+        Pref.setString("Basal", seekbar_basal.progress.toString())
+        Pref.setString("Bolus", seekbar_bolus.progress.toString())
+    }
+
+    private fun addDevice(device: BluetoothDevice) {
+        mLeDeviceAdapter.addDevice(device)
+        mLeDeviceAdapter.notifyDataSetChanged()
+    }
+
+    private fun enableBT() {
+        val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+        startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT)
+    }
+
     private fun changeUI(connected: Boolean) {
-        disconnectButton.isEnabled = connected
-        sendButton.isEnabled = !connected
+        disconnect.isEnabled = connected
+        send.isEnabled = !connected
         when (connected) {
             true -> {
                 showText(getString(R.string.connected))
-                listview.visibility = View.GONE
+                search.isEnabled = false
+                devices.visibility = View.GONE
             }
             false -> {
                 showText(getString(R.string.disconnected))
-                listview.visibility = View.VISIBLE
+                search.isEnabled = true
+                devices.visibility = View.VISIBLE
             }
         }
     }
@@ -210,6 +243,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun sendData() {
+        saveValues()
         val bundle = Bundle()
         val message = Message.obtain(null, BluetoothLeService.SEND_DATA)
         message.data = bundle
@@ -221,16 +255,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        if (bound)
-            unbindService(serviceConnection)
-    }
-    
-
     private fun showText(text: String) {
-        uuid_textView.text = "" + uuid_textView.text + "\n" + text
+        console.text = "" + console.text + "\n" + text
     }
+
+    private fun SeekBar.setListener(view: TextView) =
+        this.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                view.text = seekBar?.progress.toString()
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+
+            }
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+
+            }
+        })
 
     companion object {
         const val REQUEST_COARSE_LOCATION = 2
