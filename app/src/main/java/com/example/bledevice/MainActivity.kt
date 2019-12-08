@@ -98,11 +98,10 @@ class MainActivity : AppCompatActivity() {
 
         mLeDeviceAdapter = LeDeviceListAdapter(this)
         listview.adapter = mLeDeviceAdapter
-        //listview.visibility = View.GONE
         listview.setOnItemClickListener { _, _, position, _ ->
             val device: BluetoothDevice = mLeDeviceAdapter.getDevice(position)
             if (!bound) {
-                val intent = Intent(this, BluetoothLeService::class.java)
+                val intent = Intent(this, BluetoothLeServiceSecond::class.java)
                 bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
             }
             connect(device)
@@ -110,7 +109,7 @@ class MainActivity : AppCompatActivity() {
 
         searchButton.isEnabled = true
         searchButton.setOnClickListener {
-            val intent = Intent(this, BluetoothLeService::class.java)
+            val intent = Intent(this, BluetoothLeServiceSecond::class.java)
             bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
             if (bound) {
                 search()
@@ -138,7 +137,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode == REQUEST_ENABLE_BT) {
-            val intent = Intent(this, BluetoothLeService::class.java)
+            val intent = Intent(this, BluetoothLeServiceSecond::class.java)
             bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
 
             search()
@@ -161,20 +160,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun changeUI(connected: Boolean) {
-        Handler(Looper.getMainLooper()).post {
-            disconnectButton.isEnabled = connected
-            sendButton.isEnabled = !connected
-            when (connected) {
-                true -> {
-                    showText(getString(R.string.connected))
-                    listview.visibility = View.GONE
-                }
-                false -> {
-                    showText(getString(R.string.disconnected))
-                    listview.visibility = View.VISIBLE
-                }
+        disconnectButton.isEnabled = connected
+        sendButton.isEnabled = !connected
+        when (connected) {
+            true -> {
+                showText(getString(R.string.connected))
+                listview.visibility = View.GONE
             }
-
+            false -> {
+                showText(getString(R.string.disconnected))
+                listview.visibility = View.VISIBLE
+            }
         }
     }
 
@@ -227,15 +223,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        serviceConnection?.let {
+        if (bound)
             unbindService(serviceConnection)
-        }
     }
+    
 
     private fun showText(text: String) {
-        runOnUiThread {
-            uuid_textView.text = "" + uuid_textView.text + "\n" + text
-        }
+        uuid_textView.text = "" + uuid_textView.text + "\n" + text
     }
 
     companion object {

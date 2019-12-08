@@ -678,7 +678,7 @@ class BluetoothLeService : Service() {
             val divider = Pref.getString("Divider", "1").toDouble()
             val currentGlucose: Double = nowGetGlucoseValue(buffer) / divider
             val simpleDateFormat = SimpleDateFormat("HH:mm", Locale.UK)
-            Pref.setString("Glucose", currentGlucose.toString())
+            Pref.setString("Glucose", String.format("%.1f", currentGlucose))
             Pref.setString(
                 "Time",
                 simpleDateFormat.format(timeLastCmdReceived).toString()//.replace(":", "_")
@@ -936,7 +936,7 @@ class BluetoothLeService : Service() {
         strBuilder.append("?id=${Pref.getString("Mac", "1")}")
         strBuilder.append("&time=${Pref.getString("Time", "0")}")
         strBuilder.append("&date=${Pref.getString("Date", "0")}")
-        strBuilder.append("&sugar=${String.format(".1%f", Pref.getString("Glucose", "0"))}")
+        strBuilder.append("&sugar=${Pref.getString("Glucose", "0")}")
 
         val meal = Pref.getString("Meal", "0")
         val basal = Pref.getString("Basal", "0")
@@ -999,8 +999,8 @@ class BluetoothLeService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "Channel_1"
-        private const val NOTIFICATION_ID = 1
+        const val CHANNEL_ID = "Channel_1"
+        const val NOTIFICATION_ID = 1
         private const val STATE_DISCONNECTED = 0
         private const val STATE_CONNECTING = 1
         private const val STATE_CONNECTED = 2
