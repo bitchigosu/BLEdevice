@@ -130,6 +130,9 @@ class BluetoothLeServiceSecond : Service() {
         const val MmollToMgdl = 18.0182
         const val MgdlToMmoll = 1 / MmollToMgdl
 
+        const val DIVIDER = 180.26
+
+
     }
 
     private val mMessenger = Messenger(InternalHandler())
@@ -244,7 +247,11 @@ class BluetoothLeServiceSecond : Service() {
         mBluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager?
         mBluetoothAdapter = mBluetoothManager?.adapter
         mHandler = Handler()
-        okHttpClient = OkHttpClient()
+        okHttpClient = OkHttpClient.Builder().apply {
+            connectTimeout(5, TimeUnit.MINUTES)
+            readTimeout(5, TimeUnit.MINUTES)
+            retryOnConnectionFailure(true)
+        }.build()
 
         createNotificationChannel();
         startForeground(BluetoothLeService.NOTIFICATION_ID, createNotification().build())
@@ -684,20 +691,16 @@ class BluetoothLeServiceSecond : Service() {
 
             cmdFound = 1
 
-            val divider = Pref.getString("Divider", "1").toDouble()
-            val currentGlucose: Double = nowGetGlucoseValue(buffer) / divider
+            val currentGlucose: Double = nowGetGlucoseValue(buffer) / DIVIDER
             val simpleDateFormat = SimpleDateFormat("HH:mm", Locale.UK)
-            Pref.setString("Glucose", String.format("%.1f", currentGlucose))
+            Pref.setString("Glucose", String.format("%.1f", currentGlucose).replace(",", "."))
             Pref.setString(
                 "Time",
-                simpleDateFormat.format(mTimeLastCmdReceived).toString().replace(":", "_")
+                simpleDateFormat.format(mTimeLastCmdReceived).toString()
             )
             Pref.setString(
                 "Date",
-                DateFormat.getDateInstance(3).format(mTimeLastCmdReceived).toString().replace(
-                    ".",
-                    "_"
-                )
+                DateFormat.getDateInstance(3).format(mTimeLastCmdReceived).toString()
             )
             sendData()
 
@@ -1073,5 +1076,7 @@ class BluetoothLeServiceSecond : Service() {
             val intent = Intent(action)
             sendBroadcast(intent)
         }
+
     }
+
 }

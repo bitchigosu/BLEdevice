@@ -146,7 +146,7 @@ class MainActivity : AppCompatActivity() {
             unbindService(serviceConnection)
         }
 
-        send.isEnabled = true
+        //send.isEnabled = true
 
         send.setOnClickListener {
             if (bound) {
@@ -192,7 +192,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun changeUI(connected: Boolean) {
         disconnect.isEnabled = connected
-        send.isEnabled = !connected
+        //send.isEnabled = !connected
         when (connected) {
             true -> {
                 showText(getString(R.string.connected))
