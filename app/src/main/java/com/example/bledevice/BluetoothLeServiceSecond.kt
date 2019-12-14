@@ -78,7 +78,8 @@ class BluetoothLeServiceSecond : Service() {
     private lateinit var request: Request
 
     companion object {
-        const val SCAN_PERIOD: Long = 10000
+        const val CHANNEL_ID = "Channel_1"
+        const val NOTIFICATION_ID = 1
         const val STATE_DISCONNECTED = 0
         const val STATE_CONNECTING = 1
         const val STATE_CONNECTED = 2
@@ -132,7 +133,17 @@ class BluetoothLeServiceSecond : Service() {
 
         const val DIVIDER = 180.26
 
+        const val CONNECT = 1
+        const val DISCONNECT = 2
+        const val SEARCH = 3
+        const val SHOW_TEXT = 4
+        const val CHANGE_UI = 5
+        const val ADD_DEVICE = 6
+        const val SEND_DATA = 7
 
+        const val REQUEST_ENABLE_BT = 11
+
+        const val SCAN_PERIOD: Long = 10000
     }
 
     private val mMessenger = Messenger(InternalHandler())
@@ -141,18 +152,18 @@ class BluetoothLeServiceSecond : Service() {
     internal inner class InternalHandler : Handler() {
         override fun handleMessage(msg: Message) {
             when (msg.what) {
-                BluetoothLeService.CONNECT -> {
+                CONNECT -> {
                     mMainActivityMessenger = msg.replyTo
                     connect(msg.data.getString("address")!!)
                 }
-                BluetoothLeService.DISCONNECT -> {
+                DISCONNECT -> {
                     disconnect()
                 }
-                BluetoothLeService.SEARCH -> {
+                SEARCH -> {
                     mMainActivityMessenger = msg.replyTo
                     search()
                 }
-                BluetoothLeService.SEND_DATA -> {
+                SEND_DATA -> {
                     sendData()
                 }
                 else -> super.handleMessage(msg)
@@ -194,7 +205,7 @@ class BluetoothLeServiceSecond : Service() {
     }
 
     private fun sendMessageEnableBT() {
-        val message = Message.obtain(null, BluetoothLeService.REQUEST_ENABLE_BT)
+        val message = Message.obtain(null, REQUEST_ENABLE_BT)
         try {
             mMainActivityMessenger!!.send(message)
         } catch (e: RemoteException) {
@@ -205,7 +216,7 @@ class BluetoothLeServiceSecond : Service() {
     private fun sendMessageUpdateUI(connected: Boolean) {
         val bundle = Bundle()
         bundle.putBoolean("changeUI", connected)
-        val message = Message.obtain(null, BluetoothLeService.CHANGE_UI)
+        val message = Message.obtain(null, CHANGE_UI)
         message.data = bundle
 
         try {
@@ -218,7 +229,7 @@ class BluetoothLeServiceSecond : Service() {
     private fun sendMessageAddDevice(device: BluetoothDevice) {
         val bundle = Bundle()
         bundle.putParcelable("device", device)
-        val message = Message.obtain(null, BluetoothLeService.ADD_DEVICE)
+        val message = Message.obtain(null, ADD_DEVICE)
         message.data = bundle
 
         try {
@@ -231,7 +242,7 @@ class BluetoothLeServiceSecond : Service() {
     private fun sendMessageShowText(text: String) {
         val bundle = Bundle()
         bundle.putString("text", text)
-        val message = Message.obtain(null, BluetoothLeService.SHOW_TEXT)
+        val message = Message.obtain(null, SHOW_TEXT)
         message.data = bundle
 
         try {
@@ -254,13 +265,13 @@ class BluetoothLeServiceSecond : Service() {
         }.build()
 
         createNotificationChannel();
-        startForeground(BluetoothLeService.NOTIFICATION_ID, createNotification().build())
+        startForeground(NOTIFICATION_ID, createNotification().build())
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                BluetoothLeService.CHANNEL_ID, "Channel name",
+                CHANNEL_ID, "Channel name",
                 NotificationManager.IMPORTANCE_DEFAULT
             )
 
@@ -272,7 +283,7 @@ class BluetoothLeServiceSecond : Service() {
     }
 
     private fun createNotification(): NotificationCompat.Builder {
-        return NotificationCompat.Builder(this, BluetoothLeService.CHANNEL_ID)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("BLE service")
             .setOnlyAlertOnce(true)

@@ -29,23 +29,22 @@ class MainActivity : AppCompatActivity() {
 
     private var bound = false
 
-    private var bleService: BluetoothLeService? = null
     private lateinit var messenger: Messenger
     private var mainActivityMessenger: Messenger = Messenger(InternalMainActivityHandler())
 
     inner class InternalMainActivityHandler : Handler() {
         override fun handleMessage(msg: Message?) {
             when (msg?.what) {
-                BluetoothLeService.REQUEST_ENABLE_BT -> {
+                BluetoothLeServiceSecond.REQUEST_ENABLE_BT -> {
                     enableBT()
                 }
-                BluetoothLeService.ADD_DEVICE -> {
+                BluetoothLeServiceSecond.ADD_DEVICE -> {
                     addDevice(msg.data?.getParcelable("device") as BluetoothDevice)
                 }
-                BluetoothLeService.SHOW_TEXT -> {
+                BluetoothLeServiceSecond.SHOW_TEXT -> {
                     showText(msg.data?.getString("text")!!)
                 }
-                BluetoothLeService.CHANGE_UI -> {
+                BluetoothLeServiceSecond.CHANGE_UI -> {
                     changeUI(msg.data?.getBoolean("changeUI")!!)
                 }
             }
@@ -61,7 +60,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
-            bleService = null
             bound = false
         }
     }
@@ -142,7 +140,6 @@ class MainActivity : AppCompatActivity() {
         disconnect.setOnClickListener {
             disconnect()
             bound = false
-            bleService = null
             unbindService(serviceConnection)
         }
 
@@ -208,7 +205,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun search() {
-        val message = Message.obtain(null, BluetoothLeService.SEARCH)
+        val message = Message.obtain(null, BluetoothLeServiceSecond.SEARCH)
         message.replyTo = mainActivityMessenger
         try {
             messenger.send(message)
@@ -220,7 +217,7 @@ class MainActivity : AppCompatActivity() {
     private fun connect(device: BluetoothDevice) {
         val bundle = Bundle()
         bundle.putString("address", device.address)
-        val message = Message.obtain(null, BluetoothLeService.CONNECT)
+        val message = Message.obtain(null, BluetoothLeServiceSecond.CONNECT)
         message.data = bundle
         message.replyTo = mainActivityMessenger
         try {
@@ -232,7 +229,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun disconnect() {
         val bundle = Bundle()
-        val message = Message.obtain(null, BluetoothLeService.DISCONNECT)
+        val message = Message.obtain(null, BluetoothLeServiceSecond.DISCONNECT)
         message.data = bundle
         message.replyTo = mainActivityMessenger
         try {
@@ -245,7 +242,7 @@ class MainActivity : AppCompatActivity() {
     private fun sendData() {
         saveValues()
         val bundle = Bundle()
-        val message = Message.obtain(null, BluetoothLeService.SEND_DATA)
+        val message = Message.obtain(null, BluetoothLeServiceSecond.SEND_DATA)
         message.data = bundle
         message.replyTo = mainActivityMessenger
         try {
