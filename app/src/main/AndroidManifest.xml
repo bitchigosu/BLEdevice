@@ -23,7 +23,7 @@
             android:theme="@style/AppTheme"
             tools:ignore="GoogleAppIndexingWarning">
         <service
-                android:name=".BluetoothLeServiceSecond"
+                android:name=".BluetoothLeService"
                 android:enabled="true"
                 android:exported="true"></service>
         <service

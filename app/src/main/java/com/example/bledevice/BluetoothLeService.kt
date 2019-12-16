@@ -23,7 +23,7 @@ import kotlin.concurrent.withLock
 import kotlin.experimental.and
 
 
-class BluetoothLeServiceSecond : Service() {
+class BluetoothLeService : Service() {
 
     private val TAG = "MainActivity"
     private val REQUEST_COARSE_LOCATION = 2
@@ -140,6 +140,8 @@ class BluetoothLeServiceSecond : Service() {
         const val CHANGE_UI = 5
         const val ADD_DEVICE = 6
         const val SEND_DATA = 7
+        
+        const val VALUES_HAS_BEEN_SEND = "Values has been send"
 
         const val REQUEST_ENABLE_BT = 11
 
@@ -174,8 +176,8 @@ class BluetoothLeServiceSecond : Service() {
     private val localBinder = LocalBinder()
 
     inner class LocalBinder : Binder() {
-        val service: BluetoothLeServiceSecond
-            get() = this@BluetoothLeServiceSecond
+        val service: BluetoothLeService
+            get() = this@BluetoothLeService
     }
 
     override fun onBind(intent: Intent?): IBinder? = mMessenger.binder
@@ -320,9 +322,14 @@ class BluetoothLeServiceSecond : Service() {
                 "isa.eshestakov.ru/api/dia/patients/set"
             )}"
         )
+
+        val sdf = SimpleDateFormat("HH:mm", Locale.UK)
+        val time = sdf.format(System.currentTimeMillis()).toString()
+        val date = DateFormat.getDateInstance(3).format(System.currentTimeMillis()).toString()
+
         strBuilder.append("?id=${Pref.getString("Mac", "1")}")
-        strBuilder.append("&time=${Pref.getString("Time", "0")}")
-        strBuilder.append("&date=${Pref.getString("Date", "0")}")
+        strBuilder.append("&time=$time")
+        strBuilder.append("&date=$date")
         strBuilder.append("&sugar=${Pref.getString("Glucose", "0")}")
 
         val meal = Pref.getString("Meal", "0")
@@ -339,13 +346,13 @@ class BluetoothLeServiceSecond : Service() {
         request = Request.Builder()
             .url(strBuilder.toString())
             .build()
-
+        
         okHttpClient.newCall(request).enqueue(object : Callback {
             override fun onResponse(call: Call, response: Response) {
                 if (!response.isSuccessful) {
                     throw IOException("Unexpected code $response")
                 } else {
-                    sendMessageShowText("Values has been send")
+                    sendMessageShowText(VALUES_HAS_BEEN_SEND)
                     Pref.setString("Glucose", "0")
                     Pref.setString("Meal", "0")
                     Pref.setString("Basal", "0")

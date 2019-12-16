@@ -3,8 +3,8 @@
         xmlns:app="http://schemas.android.com/apk/res-auto"
         xmlns:tools="http://schemas.android.com/tools"
         android:layout_width="match_parent"
-        android:background="#EDEEF0"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:background="#EDEEF0">
 
     <android.support.constraint.ConstraintLayout
             android:layout_width="match_parent"
@@ -138,6 +138,7 @@
                 android:layout_height="200dp"
                 android:background="@color/white"
                 android:elevation="4dp"
+                android:nestedScrollingEnabled="true"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@id/search" />
@@ -169,8 +170,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:background="@color/white"
-                android:visibility="gone"
                 android:textStyle="bold"
+                android:visibility="gone"
                 app:layout_constraintTop_toBottomOf="@id/show_hide_console" />
     </android.support.constraint.ConstraintLayout>
 </ScrollView>

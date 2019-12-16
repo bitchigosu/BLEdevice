@@ -9,16 +9,15 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.*
 import android.support.v7.app.AppCompatActivity
-import android.text.method.ScrollingMovementMethod
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.SeekBar
 import android.widget.TextView
+import com.example.bledevice.BluetoothLeService.Companion.VALUES_HAS_BEEN_SEND
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.activity_main.meal_value
 import kotlinx.android.synthetic.main.activity_main.seekbar_meal
-import kotlinx.android.synthetic.main.activity_settings.*
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 
@@ -35,16 +34,20 @@ class MainActivity : AppCompatActivity() {
     inner class InternalMainActivityHandler : Handler() {
         override fun handleMessage(msg: Message?) {
             when (msg?.what) {
-                BluetoothLeServiceSecond.REQUEST_ENABLE_BT -> {
+                BluetoothLeService.REQUEST_ENABLE_BT -> {
                     enableBT()
                 }
-                BluetoothLeServiceSecond.ADD_DEVICE -> {
+                BluetoothLeService.ADD_DEVICE -> {
                     addDevice(msg.data?.getParcelable("device") as BluetoothDevice)
                 }
-                BluetoothLeServiceSecond.SHOW_TEXT -> {
+                BluetoothLeService.SHOW_TEXT -> {
                     showText(msg.data?.getString("text")!!)
+
+                    if (msg.data?.getString("text").equals(VALUES_HAS_BEEN_SEND)) {
+                        setValues()
+                    }
                 }
-                BluetoothLeServiceSecond.CHANGE_UI -> {
+                BluetoothLeService.CHANGE_UI -> {
                     changeUI(msg.data?.getBoolean("changeUI")!!)
                 }
             }
@@ -55,7 +58,6 @@ class MainActivity : AppCompatActivity() {
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             messenger = Messenger(service)
-            bound = true
             search()
         }
 
@@ -93,7 +95,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode == REQUEST_ENABLE_BT) {
-            val intent = Intent(this, BluetoothLeServiceSecond::class.java)
+            val intent = Intent(this, BluetoothLeService::class.java)
             bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
 
             search()
@@ -121,7 +123,7 @@ class MainActivity : AppCompatActivity() {
         devices.setOnItemClickListener { _, _, position, _ ->
             val device: BluetoothDevice = mLeDeviceAdapter.getDevice(position)
             if (!bound) {
-                val intent = Intent(this, BluetoothLeServiceSecond::class.java)
+                val intent = Intent(this, BluetoothLeService::class.java)
                 bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
             }
             connect(device)
@@ -129,7 +131,7 @@ class MainActivity : AppCompatActivity() {
 
         search.isEnabled = true
         search.setOnClickListener {
-            val intent = Intent(this, BluetoothLeServiceSecond::class.java)
+            val intent = Intent(this, BluetoothLeService::class.java)
             bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
             if (bound) {
                 search()
@@ -155,20 +157,24 @@ class MainActivity : AppCompatActivity() {
         }
         //console.movementMethod = ScrollingMovementMethod()
 
+        setValues()
+
+        seekbar_meal.setListener(meal_value)
+        seekbar_basal.setListener(basal_value)
+        seekbar_bolus.setListener(bolus_value)
+    }
+
+    private fun setValues() {
         GlobalScope.launch {
             seekbar_meal.progress = Pref.getString("Meal", "0").toInt()
             meal_value.text = Pref.getString("Meal", "0")
 
             seekbar_basal.progress = Pref.getString("Basal", "0").toInt()
-            meal_value.text = Pref.getString("Meal", "0")
+            basal_value.text = Pref.getString("Basal", "0")
 
             seekbar_bolus.progress = Pref.getString("Bolus", "0").toInt()
-            meal_value.text = Pref.getString("Meal", "0")
+            bolus_value.text = Pref.getString("Bolus", "0")
         }
-
-        seekbar_meal.setListener(meal_value)
-        seekbar_basal.setListener(basal_value)
-        seekbar_bolus.setListener(bolus_value)
     }
 
     private fun saveValues() {
@@ -192,6 +198,7 @@ class MainActivity : AppCompatActivity() {
         //send.isEnabled = !connected
         when (connected) {
             true -> {
+                bound = true
                 showText(getString(R.string.connected))
                 search.isEnabled = false
                 devices.visibility = View.GONE
@@ -205,7 +212,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun search() {
-        val message = Message.obtain(null, BluetoothLeServiceSecond.SEARCH)
+        val message = Message.obtain(null, BluetoothLeService.SEARCH)
         message.replyTo = mainActivityMessenger
         try {
             messenger.send(message)
@@ -217,7 +224,7 @@ class MainActivity : AppCompatActivity() {
     private fun connect(device: BluetoothDevice) {
         val bundle = Bundle()
         bundle.putString("address", device.address)
-        val message = Message.obtain(null, BluetoothLeServiceSecond.CONNECT)
+        val message = Message.obtain(null, BluetoothLeService.CONNECT)
         message.data = bundle
         message.replyTo = mainActivityMessenger
         try {
@@ -229,7 +236,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun disconnect() {
         val bundle = Bundle()
-        val message = Message.obtain(null, BluetoothLeServiceSecond.DISCONNECT)
+        val message = Message.obtain(null, BluetoothLeService.DISCONNECT)
         message.data = bundle
         message.replyTo = mainActivityMessenger
         try {
@@ -242,7 +249,7 @@ class MainActivity : AppCompatActivity() {
     private fun sendData() {
         saveValues()
         val bundle = Bundle()
-        val message = Message.obtain(null, BluetoothLeServiceSecond.SEND_DATA)
+        val message = Message.obtain(null, BluetoothLeService.SEND_DATA)
         message.data = bundle
         message.replyTo = mainActivityMessenger
         try {
