@@ -11,8 +11,8 @@ import android.support.v4.app.NotificationCompat
 import android.util.Log
 import com.example.bledevice.utils.*
 import com.rits.cloning.Cloner
-import okhttp3.*
-import java.io.IOException
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.nio.ByteBuffer
 import java.text.DateFormat
 import java.text.SimpleDateFormat
@@ -140,7 +140,7 @@ class BluetoothLeService : Service() {
         const val CHANGE_UI = 5
         const val ADD_DEVICE = 6
         const val SEND_DATA = 7
-        
+
         const val VALUES_HAS_BEEN_SEND = "Values has been send"
 
         const val REQUEST_ENABLE_BT = 11
@@ -182,7 +182,7 @@ class BluetoothLeService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = mMessenger.binder
     override fun onUnbind(intent: Intent?): Boolean {
-        close()
+        disconnect()
         return super.onUnbind(intent)
     }
 
@@ -199,7 +199,7 @@ class BluetoothLeService : Service() {
     }
 
     fun disconnect() {
-        if (mGatt != null)
+        if (this::mGatt.isInitialized)
             mGatt.close()
         mConnectionState = STATE_DISCONNECTED
         sendMessageUpdateUI(connected = false)
@@ -314,56 +314,10 @@ class BluetoothLeService : Service() {
         return sendBtMessage(JoHH.bArrayAsBuffer(reply))
     }
 
-    @Synchronized
     private fun sendData() {
-        val strBuilder = StringBuilder(
-            "http://${Pref.getString(
-                "IP",
-                "isa.eshestakov.ru/api/dia/patients/set"
-            )}"
-        )
-
-        val sdf = SimpleDateFormat("HH:mm", Locale.UK)
-        val time = sdf.format(System.currentTimeMillis()).toString()
-        val date = DateFormat.getDateInstance(3).format(System.currentTimeMillis()).toString()
-
-        strBuilder.append("?id=${Pref.getString("Mac", "1")}")
-        strBuilder.append("&time=$time")
-        strBuilder.append("&date=$date")
-        strBuilder.append("&sugar=${Pref.getString("Glucose", "0")}")
-
-        val meal = Pref.getString("Meal", "0")
-        val basal = Pref.getString("Basal", "0")
-        val bolus = Pref.getString("Bolus", "0")
-        val divider = Pref.getString("Divider", "180.62")
-        if (meal != "0") strBuilder.append("&food=$meal")
-        if (basal != "0") strBuilder.append("&basal=$basal")
-        if (bolus != "0") strBuilder.append("&bolus=$bolus")
-        if (divider != "0") strBuilder.append("&divider=$divider")
-
-        sendMessageShowText("Sending values to $strBuilder")
-
-        request = Request.Builder()
-            .url(strBuilder.toString())
-            .build()
-        
-        okHttpClient.newCall(request).enqueue(object : Callback {
-            override fun onResponse(call: Call, response: Response) {
-                if (!response.isSuccessful) {
-                    throw IOException("Unexpected code $response")
-                } else {
-                    sendMessageShowText(VALUES_HAS_BEEN_SEND)
-                    Pref.setString("Glucose", "0")
-                    Pref.setString("Meal", "0")
-                    Pref.setString("Basal", "0")
-                    Pref.setString("Bolus", "0")
-                }
-            }
-
-            override fun onFailure(call: Call, e: IOException) {
-                sendMessageShowText("Sending failed: ${e.message}")
-            }
-        })
+        mMainActivityMessenger?.let {
+            RequestMaker().sendData(it)
+        }
     }
 
     @Synchronized
@@ -969,14 +923,6 @@ class BluetoothLeService : Service() {
         mLock.withLock {
             condition.await(millis, TimeUnit.MILLISECONDS)
         }
-    }
-
-    @Synchronized
-    fun close() {
-        if (mGatt != null)
-            mGatt.close()
-        mConnectionState = STATE_DISCONNECTED
-        sendMessageUpdateUI(connected = false)
     }
 
     private fun scanDevices(enable: Boolean) {

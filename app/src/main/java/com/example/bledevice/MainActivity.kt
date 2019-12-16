@@ -18,8 +18,14 @@ import com.example.bledevice.BluetoothLeService.Companion.VALUES_HAS_BEEN_SEND
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.activity_main.meal_value
 import kotlinx.android.synthetic.main.activity_main.seekbar_meal
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import okhttp3.*
+import java.io.IOException
+import java.text.DateFormat
+import java.text.SimpleDateFormat
+import java.util.*
 
 
 class MainActivity : AppCompatActivity() {
@@ -45,6 +51,7 @@ class MainActivity : AppCompatActivity() {
 
                     if (msg.data?.getString("text").equals(VALUES_HAS_BEEN_SEND)) {
                         setValues()
+                        saveValues()
                     }
                 }
                 BluetoothLeService.CHANGE_UI -> {
@@ -145,17 +152,13 @@ class MainActivity : AppCompatActivity() {
             unbindService(serviceConnection)
         }
 
-        //send.isEnabled = true
-
         send.setOnClickListener {
-            if (bound) {
-                sendData()
-            }
+            saveValues()
+            sendRequest()
         }
         show_hide_console.setOnClickListener {
             console.visibility = if (console.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
-        //console.movementMethod = ScrollingMovementMethod()
 
         setValues()
 
@@ -165,16 +168,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setValues() {
-        GlobalScope.launch {
-            seekbar_meal.progress = Pref.getString("Meal", "0").toInt()
-            meal_value.text = Pref.getString("Meal", "0")
+        val meal = Pref.getString("Meal", "0")
+        seekbar_meal.progress = meal.toInt()
+        meal_value.text = meal
 
-            seekbar_basal.progress = Pref.getString("Basal", "0").toInt()
-            basal_value.text = Pref.getString("Basal", "0")
+        val basal = Pref.getString("Basal", "0")
+        seekbar_basal.progress = basal.toInt()
+        basal_value.text = basal
 
-            seekbar_bolus.progress = Pref.getString("Bolus", "0").toInt()
-            bolus_value.text = Pref.getString("Bolus", "0")
-        }
+        val bolus = Pref.getString("Bolus", "0")
+        seekbar_bolus.progress = bolus.toInt()
+        bolus_value.text = bolus
     }
 
     private fun saveValues() {
@@ -257,6 +261,10 @@ class MainActivity : AppCompatActivity() {
         } catch (e: RemoteException) {
             e.printStackTrace()
         }
+    }
+
+    private fun sendRequest() {
+        RequestMaker().sendData(mainActivityMessenger)
     }
 
     private fun showText(text: String) {
